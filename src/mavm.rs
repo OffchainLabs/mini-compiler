@@ -298,6 +298,7 @@ pub enum BufferElem {
 pub struct Buffer {
     elem: BufferElem,
     hash: RefCell<Option<Packed>>,
+    pub max_access: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -412,6 +413,14 @@ fn zero_packed(sz: u8) -> Packed {
     }
 }
 
+fn max(a: u64, b: usize) -> u64 {
+    if a > (b as u64) {
+        a
+    } else {
+        b as u64
+    }
+}
+
 fn hash_sparse(idx: &[usize], buf: &[u8], sz: u8) -> Packed {
     if sz == 5 {
         let mut res = [0u8; 32];
@@ -447,24 +456,27 @@ fn hash_sparse(idx: &[usize], buf: &[u8], sz: u8) -> Packed {
 }
 
 impl Buffer {
-    fn node(vec: Rc<Vec<Buffer>>, h: u8) -> Buffer {
+    fn node(vec: Rc<Vec<Buffer>>, h: u8, mx: u64) -> Buffer {
         Buffer {
             elem: BufferElem::Node(vec, h),
             hash: RefCell::new(None),
+            max_access: mx,
         }
     }
 
-    fn leaf(vec: Rc<Vec<u8>>) -> Buffer {
+    fn leaf(vec: Rc<Vec<u8>>, mx: u64) -> Buffer {
         Buffer {
             elem: BufferElem::Leaf(vec),
             hash: RefCell::new(None),
+            max_access: mx,
         }
     }
 
-    fn sparse(vec: Rc<Vec<usize>>, vec2: Rc<Vec<u8>>, h: u8) -> Buffer {
+    fn sparse(vec: Rc<Vec<usize>>, vec2: Rc<Vec<u8>>, h: u8, mx: u64) -> Buffer {
         Buffer {
             elem: BufferElem::Sparse(vec, vec2, h),
             hash: RefCell::new(None),
+            max_access: mx,
         }
     }
 
@@ -476,8 +488,18 @@ impl Buffer {
         ret
     }
 
+    #[allow(dead_code)]
+    pub fn check_size(&self) -> usize {
+        let v = self.as_bytes(1024);
+        let mut acc = 1023;
+        while acc > 0 && v[acc] == 0 {
+            acc = acc - 1;
+        }
+        acc
+    }
+
     pub fn avm_hash(&self) -> Uint256 {
-        Uint256::avm_hash2(&Uint256::from_u64(123), &self.hash().hash)
+        Uint256::avm_hash2(&Uint256::from_u64(self.max_access), &self.hash().hash)
     }
 
     pub fn hash_no_caching(&self) -> Packed {
@@ -533,14 +555,14 @@ impl Buffer {
 
     #[allow(dead_code)]
     pub fn empty0() -> Buffer {
-        Buffer::leaf(Rc::new(Vec::new()))
+        Buffer::leaf(Rc::new(Vec::new()), 0)
     }
 
     pub fn empty1() -> Rc<Vec<Buffer>> {
         let mut vec = Vec::new();
         let empty = Rc::new(Vec::new());
         for _i in 0..128 {
-            vec.push(Buffer::leaf(Rc::clone(&empty)));
+            vec.push(Buffer::leaf(Rc::clone(&empty), 0));
         }
         Rc::new(vec)
     }
@@ -552,35 +574,36 @@ impl Buffer {
         let mut vec = Vec::new();
         let empty = Buffer::make_empty(h - 1);
         for _i in 0..128 {
-            vec.push(Buffer::node(Rc::clone(&empty), h - 1));
+            vec.push(Buffer::node(Rc::clone(&empty), h - 1, 0));
         }
         Rc::new(vec)
     }
 
     // Make for level, lower levels are sparse
-    fn make_sparse(h: u8) -> Buffer {
+    fn make_sparse(h: u8, mx: u64) -> Buffer {
         if h == 0 {
-            return Buffer::leaf(Rc::new(Vec::new()));
+            return Buffer::leaf(Rc::new(Vec::new()), mx);
         }
         let mut vec = Vec::new();
-        let empty = Buffer::sparse(Rc::new(Vec::new()), Rc::new(Vec::new()), h - 1);
+        let empty = Buffer::sparse(Rc::new(Vec::new()), Rc::new(Vec::new()), h - 1, mx);
         for _i in 0..128 {
             vec.push(empty.clone());
         }
-        Buffer::node(Rc::new(vec), h)
+        Buffer::node(Rc::new(vec), h, mx)
     }
 
     pub fn set_byte(&self, offset: usize, v: u8) -> Self {
+        let mx = max(self.max_access, offset);
         match &self.elem {
             BufferElem::Leaf(cell) => {
                 if offset >= 1024 {
                     let mut vec = Vec::new();
-                    vec.push(Buffer::leaf(cell.clone()));
+                    vec.push(Buffer::leaf(cell.clone(), 0));
                     let empty = Rc::new(Vec::new());
                     for _i in 1..128 {
-                        vec.push(Buffer::leaf(Rc::clone(&empty)));
+                        vec.push(Buffer::leaf(Rc::clone(&empty), 0));
                     }
-                    let buf = Buffer::node(Rc::new(vec), 1);
+                    let buf = Buffer::node(Rc::new(vec), 1, mx);
                     return buf.set_byte(offset, v);
                 }
                 let mut buf = cell.to_vec().clone();
@@ -588,11 +611,11 @@ impl Buffer {
                     buf.resize(1024, 0);
                 }
                 buf[offset] = v;
-                Buffer::leaf(Rc::new(buf))
+                Buffer::leaf(Rc::new(buf), mx)
             }
             BufferElem::Sparse(idx, buf, h) => {
                 if idx.len() > 16 {
-                    let mut nbuf = Buffer::make_sparse(*h);
+                    let mut nbuf = Buffer::make_sparse(*h, mx);
                     for (i, &el) in idx.iter().enumerate() {
                         nbuf = nbuf.set_byte(el, buf[i]);
                     }
@@ -602,30 +625,35 @@ impl Buffer {
                 let mut nbuf = buf.to_vec().clone();
                 nidx.push(offset);
                 nbuf.push(v);
-                Buffer::sparse(Rc::new(nidx), Rc::new(nbuf), *h)
+                Buffer::sparse(Rc::new(nidx), Rc::new(nbuf), *h, mx)
             }
             BufferElem::Node(cell, h) => {
                 if needed_height(offset) > calc_height(*h) {
                     let mut vec = Vec::new();
-                    vec.push(Buffer::node(cell.clone(), *h));
+                    vec.push(Buffer::node(cell.clone(), *h, 0));
                     #[cfg(feature = "sparse")]
                     for _i in 1..128 {
-                        vec.push(Buffer::sparse(Rc::new(Vec::new()), Rc::new(Vec::new()), *h));
+                        vec.push(Buffer::sparse(
+                            Rc::new(Vec::new()),
+                            Rc::new(Vec::new()),
+                            *h,
+                            0,
+                        ));
                     }
                     #[cfg(not(feature = "sparse"))]
                     {
                         let empty = Buffer::make_empty(*h);
                         for _i in 1..128 {
-                            vec.push(Buffer::node(Rc::clone(&empty), *h));
+                            vec.push(Buffer::node(Rc::clone(&empty), *h, 0));
                         }
                     }
-                    let buf = Buffer::node(Rc::new(vec), *h + 1);
+                    let buf = Buffer::node(Rc::new(vec), *h + 1, mx);
                     return buf.set_byte(offset, v);
                 }
                 let mut vec = cell.to_vec().clone();
                 let cell_len = calc_len(*h - 1);
                 vec[offset / cell_len] = vec[offset / cell_len].set_byte(offset % cell_len, v);
-                Buffer::node(Rc::new(vec), *h)
+                Buffer::node(Rc::new(vec), *h, mx)
             }
         }
     }
@@ -652,7 +680,8 @@ impl Value {
     }
 
     pub fn new_buffer(v: Vec<u8>) -> Self {
-        Value::Buffer(Buffer::leaf(Rc::new(v)))
+        let mx = if v.len() == 0 { 0 } else { (v.len() - 1) as u64 };
+        Value::Buffer(Buffer::leaf(Rc::new(v), mx))
     }
 
     pub fn copy_buffer(v: Buffer) -> Self {

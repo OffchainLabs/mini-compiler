@@ -1159,6 +1159,24 @@ impl Machine {
         loc_map
     }
 
+    // This only makes sense before the immediate is added to stack
+    fn get_stack_or_immed(&self, idx: usize) -> Option<Value> {
+        if let MachineState::Running(pc) = self.state {
+            match &self.code.get_insn(pc)?.immediate {
+                None => self.stack.nth(idx),
+                Some(imm) => {
+                    if idx == 0 {
+                        Some(imm.clone())
+                    } else {
+                        self.stack.nth(idx - 1)
+                    }
+                }
+            }
+        } else {
+            self.stack.nth(idx)
+        }
+    }
+
     ///If the opcode has a specified gas cost returns the gas cost, otherwise returns None.
     pub(crate) fn next_op_gas(&self) -> Option<u64> {
         if let MachineState::Running(pc) = self.state {
@@ -1239,21 +1257,48 @@ impl Machine {
                 AVMOpcode::EcPairing => self.gas_for_pairing(),
                 AVMOpcode::Sideload => 10,
                 AVMOpcode::NewBuffer => 1,
-                AVMOpcode::GetBuffer8 => 10,
-                AVMOpcode::GetBuffer64 => 10,
-                AVMOpcode::GetBuffer256 => 10,
-                AVMOpcode::SetBuffer8 => 100,
-                AVMOpcode::SetBuffer64 => 100,
-                AVMOpcode::SetBuffer256 => 100,
+                AVMOpcode::GetBuffer8 => 3,
+                AVMOpcode::GetBuffer64 => 3,
+                AVMOpcode::GetBuffer256 => 3,
+                AVMOpcode::SetBuffer8 => self.gas_for_setbuffer(0),
+                AVMOpcode::SetBuffer64 => self.gas_for_setbuffer(7) * 2,
+                AVMOpcode::SetBuffer256 => self.gas_for_setbuffer(31) * 2,
             })
         } else {
             None
         }
     }
 
+    fn gas_for_setbuffer(&self, add: usize) -> u64 {
+        let offset = self.get_stack_or_immed(0);
+        if let (Some(Value::Buffer(buf)), Some(Value::Int(offset))) =
+            (self.get_stack_or_immed(2), offset)
+        {
+            let mut mx = match (offset.add(&Uint256::from_usize(add))).to_usize() {
+                None => 0,
+                Some(off) => {
+                    if off as u64 > buf.max_access {
+                        off as u64
+                    } else {
+                        buf.max_access
+                    }
+                }
+            };
+            let mut res = 0;
+            mx = mx / 1024;
+            while (mx > 0) {
+                res += 80;
+                mx = mx / 8;
+            }
+            res + 240
+        } else {
+            240
+        }
+    }
+
     fn gas_for_pairing(&self) -> u64 {
-        if let Some(val) = self.stack.contents.get(0) {
-            let mut v = val;
+        if let Some(val) = self.get_stack_or_immed(0) {
+            let mut v = &val;
             for i in 0..MAX_PAIRING_SIZE {
                 if let Value::Tuple(tup) = v {
                     if tup.len() != 2 {
@@ -1272,7 +1317,7 @@ impl Machine {
     }
 
     fn gas_for_blake2f(&self) -> u64 {
-        if let Some(val) = self.stack.contents.get(0) {
+        if let Some(val) = self.get_stack_or_immed(0) {
             if let Value::Buffer(buf) = val {
                 let mut num_rounds = u32::from_be_bytes(buf.as_bytes(4).try_into().unwrap());
                 if num_rounds > 0xffff {
@@ -1307,9 +1352,6 @@ impl Machine {
     fn run_one_dont_catch_errors(&mut self, _debug: bool) -> Result<bool, ExecutionError> {
         if let MachineState::Running(pc) = self.state {
             if let Some(insn) = self.code.get_insn(pc) {
-                if let Some(val) = &insn.immediate {
-                    self.stack.push(val.clone());
-                }
                 let gas_remaining_before = if let Some(gas) = self.next_op_gas() {
                     let gas256 = Uint256::from_u64(gas);
                     let gas_remaining_before = self.arb_gas_remaining.clone();
@@ -1324,6 +1366,9 @@ impl Machine {
                 } else {
                     self.arb_gas_remaining.clone()
                 };
+                if let Some(val) = &insn.immediate {
+                    self.stack.push(val.clone());
+                }
                 match insn.opcode {
                     AVMOpcode::Noop => {
                         self.incr_pc();
