@@ -495,7 +495,7 @@ impure func arbowner_setL1GasPriceEstimate(_topFrame: EvmCallFrame, calldata: By
         evmOp_revert_knownPc(250, 0, 0);
     }
     let newGasPrice = bytearray_get256(calldata, 4);
-    setL1GasPriceEstimate(newGasPrice);
+    setL1GasPriceEstimate(newGasPrice * (1000 * 1000 * 1000));  // convert to wei
     evmOp_return(0, 0);
 }
 

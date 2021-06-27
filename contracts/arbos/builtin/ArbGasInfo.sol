@@ -26,5 +26,12 @@ interface ArbGasInfo {
 
     // return gas accounting parameters (speedLimitPerSecond, gasPoolMax, maxTxGasLimit)
     function getGasAccountingParams() external view returns (uint, uint, uint);
+
+    // get ArbOS's estimate of the L1 gas price in wei
+    function getL1GasPriceEstimate() external view returns(uint);
+
+    // set ArbOS's estimate of the L1 gas price in wei
+    // reverts unless called by chain owner or designated gas oracle (if any)
+    function setL1GasPriceEstimate(uint priceInWei) external;
 }
 

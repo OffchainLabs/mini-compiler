@@ -913,6 +913,62 @@ impl<'a> _ArbGasInfo<'a> {
             )))
         }
     }
+
+    pub fn _get_l1_gas_price_estimate(
+        &self,
+        machine: &mut Machine,
+    ) -> Result<Uint256, ethabi::Error> {
+        let (receipts, _sends) = self.contract_abi.call_function(
+            self.my_address.clone(),
+            "getL1GasPriceEstimate",
+            &[],
+            machine,
+            Uint256::zero(),
+            self.debug,
+        )?;
+
+        if receipts.len() != 1 {
+            return Err(ethabi::Error::from("wrong number of receipts"));
+        }
+
+        if receipts[0].succeeded() {
+            Ok(Uint256::from_bytes(&receipts[0].get_return_data()))
+        } else {
+            Err(ethabi::Error::from(format!(
+                "tx failed: {}",
+                receipts[0]._get_return_code_text()
+            )))
+        }
+    }
+
+    pub fn _set_l1_gas_price_estimate(
+        &self,
+        machine: &mut Machine,
+        price_wei: Uint256,
+        caller: Uint256,
+    ) -> Result<(), ethabi::Error> {
+        let (receipts, _sends) = self.contract_abi.call_function(
+            caller,
+            "setL1GasPriceEstimate",
+            &[ethabi::Token::Uint(price_wei.to_u256())],
+            machine,
+            Uint256::zero(),
+            self.debug,
+        )?;
+
+        if receipts.len() != 1 {
+            return Err(ethabi::Error::from("wrong number of receipts"));
+        }
+
+        if receipts[0].succeeded() {
+            Ok(())
+        } else {
+            Err(ethabi::Error::from(format!(
+                "tx failed: {}",
+                receipts[0]._get_return_code_text()
+            )))
+        }
+    }
 }
 
 pub struct _ArbAggregator {
@@ -1919,6 +1975,30 @@ pub fn _evm_test_arbgasinfo(log_to: Option<&Path>, debug: bool) -> Result<(), et
     }
 
     Ok(())
+}
+
+#[test]
+fn test_arbgas_oracle() {
+    let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
+    machine.start_at_zero();
+
+    let wallet = machine.runtime_env.new_wallet();
+    let my_addr = Uint256::from_bytes(wallet.address().as_bytes());
+
+    let arbowner = _ArbOwner::_new(&wallet, false);
+    let arbgasinfo = _ArbGasInfo::_new(&wallet, false);
+
+    arbowner
+        ._set_chain_parameter(&mut machine, "GasPriceOracle", my_addr.clone(), true)
+        .unwrap();
+
+    let gpest = Uint256::_from_gwei(73);
+    arbgasinfo
+        ._set_l1_gas_price_estimate(&mut machine, gpest.clone(), my_addr.clone())
+        .unwrap();
+
+    let gasprice = arbgasinfo._get_l1_gas_price_estimate(&mut machine).unwrap();
+    assert_eq!(gpest, gasprice);
 }
 
 pub fn _evm_test_rate_control(log_to: Option<&Path>, debug: bool) -> Result<(), ethabi::Error> {

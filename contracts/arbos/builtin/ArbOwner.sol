@@ -10,6 +10,7 @@ interface ArbOwner {
     function isFairGasPriceSender(address addr) external view returns(bool);
     function getAllFairGasPriceSenders() external view returns(bytes memory);
 
+    // DEPRECATED: use ArbGasInfo.setL1GasPriceEstimate(priceInGwei * 1000000000) instead
     function setL1GasPriceEstimate(uint priceInGwei) external;
 
     // Deploy a contract on the chain

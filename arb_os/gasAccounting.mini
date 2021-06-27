@@ -1039,13 +1039,13 @@ impure func initGasPriceEstimator() {
     };
 }
 
-impure func getL1GasPriceEstimate() -> uint {
+public impure func getL1GasPriceEstimate() -> uint {
     return globalL1GasPriceEstimator.estimateWei;
 }
 
-public impure func setL1GasPriceEstimate(newPriceGwei: uint) {
+public impure func setL1GasPriceEstimate(newPriceWei: uint) {
     globalL1GasPriceEstimator = globalL1GasPriceEstimator with {
-        estimateWei: newPriceGwei * 1000 * 1000 * 1000
+        estimateWei: newPriceWei
     };
 }
 
