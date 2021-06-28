@@ -1,5 +1,5 @@
 {
-  "arbos_version": 33,
+  "arbos_version": 34,
   "integer": {
     "AVMSendType_batch": 0,
     "AVM_add": 1,
@@ -90,14 +90,13 @@
     "Charging_ArbGasPerAvmGas": 100,
     "Charging_AssumedBatchCostL1Gas": 50000,
     "Charging_DefaultArbGasDivisor": 100,
-    "Charging_DefaultArbGasPerL2Tx": 0,
-    "Charging_DefaultArbGasPerCalldataUnit": 0,
+    "Charging_DefaultBaseTxFeeL1Gas": 4000,
     "Charging_DefaultL1GasPerCalldataUnit": 1,
-    "Charging_DefaultL1GasPerL2Tx": 3700,
     "Charging_DefaultL1GasPerStorage": 2000,
-    "Charging_DefaultArbGasPerStorage": 0,
     "Charging_GasPoolDepthSeconds": 720,
     "Charging_MinArbGasForContractTx": 50,
+    "Charging_MinBaseTxFeeL1Gas": 500,
+    "Charging_MaxBaseTxFeeL1Gas": 50000,
     "Charging_RetryableTxRepriceIntervalSeconds": 86400,
     "Charging_TxGasLimitSeconds": 20,
     "DefaultSecondsPerSend": 1800,
@@ -234,6 +233,7 @@
   "contract_folder": "contracts/artifacts/arbos/builtin",
   "contract": [
     "ArbAggregator",
+    "ArbGasInfo",
     "ArbosTest",
     "ArbOwner",
     "ArbRetryableTx",

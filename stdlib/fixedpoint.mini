@@ -87,10 +87,15 @@ public func fixedPoint_mulByUintTrunc(x: FixedPoint, i: uint) -> uint {
 }
 
 public func fixedPoint_div(x: FixedPoint, y: FixedPoint) -> option<FixedPoint> {
-    return xif (x.shiftFactor == y.shiftFactor) {
-        Some(x with { val: (x.val * x.shiftFactor) / y.val })
+    return xif ((x.shiftFactor == y.shiftFactor) && (x.shiftFactor != 0)) {
+        Some(fixedPoint_new(x.val, y.val))
     } else {
-        None<FixedPoint>
+        let denom = x.shiftFactor * y.val;
+        xif (denom == 0) {
+            None<FixedPoint>
+        } else {
+            Some(fixedPoint_new(x.val * y.shiftFactor, denom))
+        }
     };
 }
 

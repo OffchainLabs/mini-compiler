@@ -3,9 +3,144 @@
 //
 
 use bridge_arbos_versions::GlobalsBeforeUpgrade;
+use bridge_arbos_versions::before__accounts_Account;
+
+use accounts::Account;
+use accounts::AccountStore;
+use accounts::AggregatorInfo;
+use accounts::accountStore_forall;
+
+use gasAccounting::GasAccountingInfo;
+
+use tracing::EvmTracer;
+use tracing::evmTracer_new;
+
+use std::avmcodebuilder::AvmCodePoint;
+
+use std::fixedpoint::fixedPoint_new;
+
+use std::merkletree::MerkleTreeBuilder;
+
+use gasAccounting::TxGasState;
+use gasAccounting::FeeConfig;
+use gasAccounting::GasPrices;
+use gasAccounting::CongestionState;
+use gasAccounting::PricingParameters;
+use gasAccounting::RetryablePrices;
+
+use std::addressSet::SetOfAddresses;
+use std::addressSet::setOfAddresses_all;
+use evmCallStack::EvmCallFrame;
+use messages::TxRequestData;
+
+use core::kvs::Kvs;
+use core::kvs::builtin_kvsForall;
 
 
-func _dummy() -> uint {
-    return 0;
+public func set_globalCallStack_onUpgrade(_input_globals: GlobalsBeforeUpgrade) -> option<EvmCallFrame> {
+    return None<EvmCallFrame>;
+}
+
+public func set_globalAccountStore_onUpgrade(oldGlobals: GlobalsBeforeUpgrade) -> AccountStore {
+    let oldGAS = oldGlobals.globalAccountStore;
+    let acctsRemapResult = builtin_kvsForall(
+        unsafecast<Kvs>(oldGAS.accounts),
+        unsafecast<func(any, any, any) -> any>(acctRemapClosure),
+        newmap<address, Account>,
+    );
+    return struct {
+        accounts: unsafecast<map<address, Account>>(acctsRemapResult),
+        retryBuffer: oldGAS.retryBuffer,
+        numContracts: oldGAS.numContracts,
+        codeRefTable: oldGAS.codeRefTable,
+        escrowStore: oldGAS.escrowStore,
+    };
+}
+
+func acctRemapClosure(_addr: address, oldAcct: before__accounts_Account, state: map<address, Account>) -> map<address, Account> {
+    let acct = struct {
+        addr: oldAcct.addr,
+        blsKey: oldAcct.blsKey,
+        nextSeqNum: oldAcct.nextSeqNum,
+        ethBalance: oldAcct.ethBalance,
+        contractInfo: oldAcct.contractInfo,
+        aggregatorInfo: xif let Some(aggInfo) = oldAcct.aggregatorInfo {
+            Some(
+                struct {
+                    decompressionState: aggInfo.decompressionState,
+                    feeCollector: aggInfo.feeCollector,
+                    baseTxFeeL1Gas: const::Charging_DefaultBaseTxFeeL1Gas,
+                }
+            )
+        } else {
+            None<AggregatorInfo>
+        },
+        aggregatorToPay: oldAcct.aggregatorToPay,
+    };
+    return state with {
+        [acct.addr] = acct
+    };
+}
+
+public func set_gasAccountingInfo_onUpgrade(input_globals: GlobalsBeforeUpgrade) -> GasAccountingInfo {
+    let old = input_globals.gasAccountingInfo;
+    return struct {
+        txState: old.txState,
+        feeConfig: struct {
+            enabled: old.feeConfig.enabled,
+            forNetwork: old.feeConfig.forNetwork,
+            forCongestion: old.feeConfig.forCongestion,
+            networkFeeRate: fixedPoint_new(
+                old.feeConfig.baseFeeMultiplier.val,
+                old.feeConfig.baseFeeMultiplier.shiftFactor - old.feeConfig.baseFeeMultiplier.val
+            ),
+        },
+        currentPrices: struct {
+            perL1CalldataUnit: old.currentPrices.perL1CalldataUnit,
+            perStorageCell: old.currentPrices.perStorageCell,
+            perArbGasBase: old.currentPrices.perArbGasBase,
+            perArbGasCongestion: old.currentPrices.perArbGasCongestion,
+            perArbGasTotal: old.currentPrices.perArbGasTotal,
+        },
+        gasRemainingThisBlock: old.gasRemainingThisBlock,
+        congestionState: old.congestionState,
+        speedLimitPerSecond: old.speedLimitPerSecond,
+        pricingParams: struct {
+            l1GasPerL1CalldataUnit: old.pricingParams.l1GasPerL1CalldataUnit,
+            l1GasPerStorage: old.pricingParams.l1GasPerStorage,
+            arbGasDivisor: old.pricingParams.arbGasDivisor,
+        },
+        gasAllocatedToThisBlock: old.gasAllocatedToThisBlock,
+        retryablePrices: old.retryablePrices,
+        allowedSenders: setOfAddresses_all(),
+    };
+}
+
+public func set_codeSegGlobals_onUpgrade(
+    _input_globals: GlobalsBeforeUpgrade
+) -> struct {
+    unreachableMask: uint,
+    dummyAcceptContractCode: impure func(),
+} {
+    return struct {
+        unreachableMask: 0,
+        dummyAcceptContractCode: unsafecast<impure func()>(0),     // will initialize this properly later
+    };
+}
+
+public func set_globalOutbox_onUpgrade(
+    input_globals: GlobalsBeforeUpgrade
+) -> struct {
+    batch: MerkleTreeBuilder,
+    batchNumber: uint,
+    numInBatch: uint,
+    evmTracer: EvmTracer,
+} {
+    return struct {
+        batch: input_globals.globalOutbox.batch,
+        batchNumber: input_globals.globalOutbox.batchNumber,
+        numInBatch: input_globals.globalOutbox.numInBatch,
+        evmTracer: evmTracer_new(),
+    };
 }
 

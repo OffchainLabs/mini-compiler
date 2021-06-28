@@ -93,12 +93,12 @@ impure func doInitializationOption(stream: ByteStream) -> option<ByteStream> {
             return bytestream_skipBytes(stream, numPayloadBytes);
         }
         let (ustr, speedLimitPerSecond) = bytestream_get256(stream)?;
-        let (ustr, l1GasPerL2Tx) = bytestream_get256(ustr)?;
-        let (ustr, arbGasPerL2Tx) = bytestream_get256(ustr)?;
+        let (ustr, _l1GasPerL2Tx) = bytestream_get256(ustr)?;
+        let (ustr, _arbGasPerL2Tx) = bytestream_get256(ustr)?;
         let (ustr, l1GasPerL2CalldataUnit) = bytestream_get256(ustr)?;
-        let (ustr, arbGasPerL2CalldataUnit) = bytestream_get256(ustr)?;
+        let (ustr, _arbGasPerL2CalldataUnit) = bytestream_get256(ustr)?;
         let (ustr, l1GasPerStorage) = bytestream_get256(ustr)?;
-        let (ustr, arbGasPerStorage) = bytestream_get256(ustr)?;
+        let (ustr, _arbGasPerStorage) = bytestream_get256(ustr)?;
         let (ustr, arbGasDivisor) = bytestream_get256(ustr)?;
         let (ustr, netFeeRecipientU) = bytestream_get256(ustr)?;
         let (ustr, congestionFeeRecipientU) = bytestream_get256(ustr)?;
@@ -110,12 +110,8 @@ impure func doInitializationOption(stream: ByteStream) -> option<ByteStream> {
         }
 
         gasAccounting_setChargingParams(
-            l1GasPerL2Tx,
-            arbGasPerL2Tx,
             l1GasPerL2CalldataUnit,
-            arbGasPerL2CalldataUnit,
             l1GasPerStorage,
-            arbGasPerStorage,
             arbGasDivisor,
             address(netFeeRecipientU),
             address(congestionFeeRecipientU),

@@ -27,6 +27,9 @@ use evmCallStack::evmCallStack_setAccountInCurrentContext;
 use evmOps::evmOp_return;
 use evmOps::evmOp_revert_knownPc;
 
+use gasAccounting::gasAccounting_getTxBaseFeeL1Gas;
+use gasAccounting::gasAccounting_setTxBaseFeeL1Gas;
+
 use std::bytearray::ByteArray;
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
@@ -53,6 +56,10 @@ public impure func arbaggregator_txcall() {
             arbaggregator_getFeeCollector(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbAggregator_setFeeCollector) {
             arbaggregator_setFeeCollector(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbAggregator_getTxBaseFee) {
+            arbaggregator_getTxBaseFee(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbAggregator_setTxBaseFee) {
+            arbaggregator_setTxBaseFee(topFrame, calldata);
         } else {
             // unrecognized function code
             evmOp_revert_knownPc(1, 0, 0);
@@ -161,4 +168,36 @@ impure func arbaggregator_setFeeCollector(topFrame: EvmCallFrame, calldata: Byte
     evmCallStack_setAccountInCurrentContext(aggregator, account_setFeeCollector(aggAcct, newCollector));
 
     evmOp_return(0, 0);
+}
+
+impure func arbaggregator_getTxBaseFee(_topFrame: EvmCallFrame, calldata: ByteArray) { // (address) -> uint
+    if (bytearray_size(calldata) != 36) {
+        evmOp_revert_knownPc(70, 0, 0);
+    }
+    let aggregator = address(bytearray_get256(calldata, 4));
+    let result = gasAccounting_getTxBaseFeeL1Gas(Some(aggregator));
+    if (evmCallStack_setTopFrameMemory(bytearray_set256(bytearray_new(0), 0, result))) {
+        evmOp_return(0, 32);
+    } else {
+        evmOp_revert_knownPc(61, 0, 0);
+    }
+}
+
+impure func arbaggregator_setTxBaseFee(topFrame: EvmCallFrame, calldata: ByteArray) { // (address, uint)
+    let caller = evmCallFrame_getCaller(topFrame);
+    if (bytearray_size(calldata) != 68) {
+        evmOp_revert_knownPc(80, 0, 0);
+    }
+    let aggregator = address(bytearray_get256(calldata, 4));
+    let fee = bytearray_get256(calldata, 36);
+
+    if ((caller != aggregator) && (Some(caller) != chainParams_getOwner()) && (caller != address(0))) {
+        evmOp_revert_knownPc(81, 0, 0);
+    }
+
+    if (gasAccounting_setTxBaseFeeL1Gas(aggregator, fee) == Some(())) {
+        evmOp_return(0, 0);
+    } else {
+        evmOp_revert_knownPc(82, 0, 0);
+    }
 }
