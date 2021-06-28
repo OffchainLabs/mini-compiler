@@ -1,0 +1,23 @@
+//
+// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+//
+
+use main::externally_used;
+use main::externally_unused;
+
+public func start() -> uint {
+    return back_edge();
+}
+
+func back_edge() -> uint {
+     let _ = externally_used;
+     return 4;
+}
+
+func unused() -> uint {
+     return externally_unused();
+}
+
+func _purposefully_unused() -> uint {
+     return 4;
+}

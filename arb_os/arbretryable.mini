@@ -12,8 +12,6 @@ use evmCallStack::evmCallFrame_getCaller;
 use evmCallStack::evmCallFrame_getCallvalue;
 use evmCallStack::evmCallFrame_getMemory;
 use evmCallStack::evmCallStack_callHitError;
-use evmCallStack::evmCallStack_getAccountInCurrentContext;
-use evmCallStack::evmCallStack_setAccountInCurrentContext;
 use evmCallStack::getRetryBufferInCurrentContext;
 use evmCallStack::setRetryBufferInCurrentContext;
 

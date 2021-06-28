@@ -5,10 +5,6 @@
 use std::bytearray::ByteArray;
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
-use std::bytearray::bytearray_get64;
-use std::bytearray::bytearray_get256;
-use std::bytearray::bytearray_extract;
 use std::bytearray::bytearray_buffer;
 use std::bytearray::bytearray_slice;
 use std::bytearray::bytearray_wrap_slice;

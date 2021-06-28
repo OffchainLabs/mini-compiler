@@ -709,7 +709,6 @@ impl FromStr for ProfilerMode {
                 String::from("Profile error"),
                 String::from("Invalid profiler mode"),
                 vec![],
-                false,
             )),
         }
     }

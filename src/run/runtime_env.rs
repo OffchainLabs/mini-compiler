@@ -13,7 +13,7 @@ use ethers_signers::{Signer, Wallet};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::io::Read;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::{collections::HashMap, fs::File, io, path::Path};
 
 #[derive(Debug, Clone)]
@@ -963,8 +963,8 @@ pub struct _ArbosBlockSummaryLog {
     pub block_num: Uint256,
     pub timestamp: Uint256,
     pub gas_limit: Uint256,
-    stats_this_block: Rc<Vec<Value>>,
-    stats_all_time: Rc<Vec<Value>>,
+    stats_this_block: Arc<Vec<Value>>,
+    stats_all_time: Arc<Vec<Value>>,
     gas_summary: _BlockGasAccountingSummary,
 }
 

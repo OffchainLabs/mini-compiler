@@ -6,24 +6,24 @@
 use crate::compile::ast::{TopLevelDecl, TypeDecl, Func, GlobalVarDecl, Type, CodeBlock,
 StructField, FuncArg, Statement, StatementKind, DebugInfo, Attributes, MatchPattern, Expr, ExprKind, TrinaryOp, BinaryOp, UnaryOp, Constant,
 OptionConst, FieldInitializer, new_func_arg, new_type_decl};
-use crate::compile::InliningMode;
+use crate::compile::{InliningMode, ErrorSystem, CompileError};
 use crate::stringtable::{StringTable, StringId};
 use crate::compile::Lines;
-use crate::pos::BytePos;
+use crate::link::Import;
+use crate::pos::{BytePos, Location};
 use crate::mavm::{Value, Instruction, Opcode};
 use crate::uint256::Uint256;
-use std::collections::HashMap;
-use lalrpop_util::ParseError;
+use std::collections::{HashMap, HashSet};
 
 
-grammar(stringtable: &mut StringTable, file_info: &Lines, filename: u64, current_path: &[String], constants: &mut HashMap<String, Uint256>);
+grammar(stringtable: &mut StringTable, file_info: &Lines, filename: u64, current_path: &[String], constants: &mut HashMap<String, Uint256>, local_constants: &mut HashMap<String, Location>, used_constants: &mut HashSet<String>, error_system: &mut ErrorSystem);
 
 extern {
     type Error = String;
 }
 
 pub Decls: Vec<TopLevelDecl> = {
-	<a: ("#![" <Attributes> "]")?><mut i:ImportDecl*> <mut n:NonImportDecl+> => {
+	<a: ("#![" <Attributes> "]")?><mut i:HeadDecl*> <mut n:BodyDecl+> => {
         i.append(&mut n);
         for decl in &mut i {
             if let (TopLevelDecl::FuncDecl(func), Some(attr)) = (decl, a) {
@@ -34,12 +34,35 @@ pub Decls: Vec<TopLevelDecl> = {
         },
 }
 
-ImportDecl: TopLevelDecl = {
-    "use" <mut p: PathDecl> ";" => {
+HeadDecl: TopLevelDecl = {
+    <lno: @L> "use" <mut p: PathDecl> ";" => {
         let file = p.pop().expect("Internal error: Path vector was empty");
-        TopLevelDecl::UseDecl(p, file)
+        let id = stringtable.get(file.clone());
+        TopLevelDecl::UseDecl(Import::new(
+            p, file, Some(id), file_info.location(BytePos::from(lno), filename),
+        ))
     },
-    <d: ImportDecl> "const" <n: IdentString> "=" <u: UnsignedInteger> ";" => { constants.insert(n, u);  d },
+    <lno: @L> "const" <n: IdentString> "=" <u: UnsignedInteger> ";" => { 
+        
+        if let Some(_) = constants.get(&n) {
+            error_system.errors.push(
+                CompileError::new(
+                    String::from("Parser error"),
+                    format!(
+                        "Constant {}{}{} is declared twice",
+                        CompileError::RED,
+                        n,
+                        CompileError::RESET,
+                    ),
+                    file_info.location(BytePos::from(lno), filename).into_iter().collect()
+                )
+            )
+        }
+        
+        constants.insert(n.clone(), u);
+        local_constants.insert(n, file_info.location(BytePos::from(lno), filename).unwrap());
+        TopLevelDecl::ConstDecl
+    },
 }
 
 PathDecl: Vec<String> = {
@@ -50,7 +73,7 @@ PathDecl: Vec<String> = {
     },
 }
 
-NonImportDecl: TopLevelDecl = {
+BodyDecl: TopLevelDecl = {
 	TypeDecl => TopLevelDecl::TypeDecl(<>),
 	FuncDecl => TopLevelDecl::FuncDecl(<>),
 	GlobalVarDecl => TopLevelDecl::VarDecl(<>),
@@ -90,21 +113,28 @@ Statement: Statement = {
 }
 
 Attributes: Attributes = {
-   <lno: @L> <names: (<IdentString> ",")*> =>? {let mut attribs = Attributes::default(); for name in names {
-       match name.as_ref() {
-           "breakpoint" => attribs.breakpoint = true,
-           "inline" => attribs.inline = InliningMode::Always,
-           "noinline" => attribs.inline = InliningMode::Never,
-           unrecognized => return Err(ParseError::User {
-            error:
-                format!("Unrecognized attribute \"{}\" {}, in file: {}",
-                    unrecognized,
-                    file_info.location(BytePos::from(lno), filename)
-                        .map(|loc| format!("{}", loc)).unwrap_or("Unknown location".to_string()),
-                        filename)
-            }),
-       }
-   }; Ok(attribs)},
+    <lno: @L> <names: (<IdentString> ",")*> <last: IdentString?> =>? {
+        let mut attribs = Attributes::default();
+        for name in names.into_iter().chain(last.into_iter()) {
+            match name.as_ref() {
+                "breakpoint" => attribs.breakpoint = true,
+                "inline" => attribs.inline = InliningMode::Always,
+                "noinline" => attribs.inline = InliningMode::Never,
+                "print" => attribs.codegen_print = true,
+                unrecognized => error_system.errors.push(
+                    CompileError::new(
+                        String::from("Lexer error"),
+                        format!(
+                            "Unrecognized attribute {}{}{}",
+                            CompileError::RED,
+                            unrecognized,
+                            CompileError::RESET,
+                        ),
+                        file_info.location(BytePos::from(lno), filename).into_iter().collect()
+                    )
+                ),
+            }
+        }; Ok(attribs) },
 }
 
 StatementKind: StatementKind = {
@@ -372,21 +402,42 @@ UnsignedInteger: Uint256 = {
 }
 
 ConstVal: Uint256 = {
-    "constval" "(" <IdentString> ")" =>?  {
-        match constants.get(&<>) {
-            Some(i) => Ok(i.clone()),
-            None => {
-                eprintln!("Unrecognized constant name: {}", <>);
-                Err(ParseError::User { error: format!("unrecognized constant name") })
+    <lno: @L> "const" "::" <c: IdentString> =>? {
+        let loc = file_info.location(BytePos::from(lno) + BytePos::from(7), filename).into_iter().collect();
+        match constants.get(&c) {
+            Some(i) => {
+                if c.starts_with('_') {
+                    error_system.warnings.push(
+                        CompileError::new_warning(
+                            String::from("Parser warning"),
+                            format!(
+                                "Constant {}{}{} was used despite being marked as intentionally unused",
+                                error_system.warn_color,
+                                &c,
+                                CompileError::RESET,
+                            ),
+                            loc
+                        )
+                    );
+                }
+                used_constants.insert(c.clone());
+                Ok(i.clone())
             }
-        }
-    },
-    "const" "::" <IdentString> =>? {
-        match constants.get(&<>) {
-            Some(i) => Ok(i.clone()),
             None => {
-                eprintln!("Unrecognized constant name: {}", <>);
-                Err(ParseError::User { error: format!("unrecognized constant name") })
+                error_system.errors.push(
+                    CompileError::new(
+                        String::from("Parser error"),
+                        format!(
+                            "Unrecognized constant {}{}{}",
+                            CompileError::RED,
+                            &c,
+                            CompileError::RESET,
+                        ),
+                        loc
+                    )
+                );
+                // intentionally skip error so as to not halt compilation
+                Ok(Uint256::from_usize(0))
             }
         }
     }

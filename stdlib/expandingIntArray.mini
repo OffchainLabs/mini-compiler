@@ -2,7 +2,6 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use std::bytearray::OpClosureFunc;
 use std::bytearray::opClosure;
 
 type ExpandingIntArray = struct {

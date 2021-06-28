@@ -3,21 +3,11 @@
 //
 
 use std::bytearray::bytearray_new;
-use std::bytearray::bytearray_unmarshalBytes;
-use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
-use std::bytearray::bytearray_setByte;
-use std::bytearray::bytearray_get64;
-use std::bytearray::bytearray_set64;
-use std::bytearray::bytearray_get256;
-use std::bytearray::bytearray_set256;
-use std::bytearray::bytearray_copy;
 
 use std::ripemd160::ripemd160hasher_new;
 use std::ripemd160::ripemd160hasher_finish;
 use std::ripemd160::ripemd160_byteArray;
 use std::ripemd160::ripemd160hasher_pushByte;
-use std::ripemd160::ripemd160hasher_push256;
 
 impure func main() {
 	asm(tests(),) { log };

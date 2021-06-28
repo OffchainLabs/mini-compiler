@@ -1,0 +1,13 @@
+{
+    "arbos_version": 28,
+    "integer": {
+        "_ShouldNotBeUsed": 8
+    },
+    "hex": {
+        "ShouldBeUsed": "8"
+    },
+    "contract_folder": "contracts/artifacts/arbos/builtin",
+    "contract": [
+        
+    ]
+}

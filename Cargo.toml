@@ -37,6 +37,7 @@ rust-crypto="^0.2"
 num-integer = "0.1"
 rustc-hex = "2.1.0"
 toml = "0.5.8"
+rayon = "1.5.1"
 
 [features]
 sparse_buffers = []

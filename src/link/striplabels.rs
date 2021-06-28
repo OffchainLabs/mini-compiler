@@ -39,7 +39,6 @@ pub fn strip_labels(
                         String::from("Compile error: Internal error"),
                         format!("Duplicate instance of internal label {:?}", x),
                         insn.debug_info.location.into_iter().collect(),
-                        false,
                     ));
                 }
             }
@@ -60,7 +59,6 @@ pub fn strip_labels(
                                   String::from("Compile error"),
                                   format!("Couldn't find a definition for label {:?} contained in instruction {:?}, most likely reference to non-existent frunction", lab, insn),
                                   insn.debug_info.location.into_iter().collect(),
-                                  false
                               )
                     )?
                 );
@@ -79,7 +77,6 @@ pub fn strip_labels(
                     String::from("Compile error: strip_labels"),
                     format!("lookup failed for jump table item: {:?}", jt_item),
                     vec![],
-                    false,
                 ));
             }
         }

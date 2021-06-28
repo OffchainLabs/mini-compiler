@@ -3,11 +3,7 @@
 //
 
 use accounts::AccountStore;
-use accounts::Account;
 use std::bytearray::ByteArray;
-use std::bytearray::MarshalledBytes;
-use messageBatch::MessageBatch;
-use std::queue::Queue;
 
 use core::kvs::Kvs;
 use core::kvs::builtin_kvsForall;
@@ -15,7 +11,6 @@ use core::kvs::builtin_kvsForall;
 use accounts::getGlobalAccountStore;
 use accounts::setGlobalAccountStore;
 use accounts::accountStore_get;
-use accounts::accountStore_set;
 use accounts::accountStore_feeCollectorForAggregator;
 use accounts::accountStore_addToEscrowUpToMax;
 use accounts::accountStore_payFullyFromEscrow;
@@ -32,36 +27,16 @@ use arbstatistics::arbStatistics_addToGasUsed;
 
 use chainParameters::chainParams_getOwner;
 
-use evmCallStack::evmCallStack_isEmpty;
 use evmCallStack::evmCallStack_getAccountInCurrentContext;
 use evmCallStack::evmCallStack_setAccountInCurrentContext;
-use evmCallStack::evmCallStack_transferEthInCurrentContext;
-
-use inbox::GasEstimationParams;
 
 use messages::TxRequestData;
 
-use std::bytearray::bytearray_new;
-use std::bytearray::bytearray_getByte;
-use std::bytearray::bytearray_get256;
-
 use std::fixedpoint::FixedPoint;
 use std::fixedpoint::fixedPoint_new;
-use std::fixedpoint::fixedPoint_getNum;
-use std::fixedpoint::fixedPoint_getDenom;
-use std::fixedpoint::fixedPoint_zero;
-use std::fixedpoint::fixedPoint_compare;
-use std::fixedpoint::fixedPoint_mulByUint;
 use std::fixedpoint::fixedPoint_mulByUintTrunc;
 use std::fixedpoint::fixedPoint_div;
 use std::fixedpoint::fixedPoint_plusOne;
-use std::fixedpoint::fixedPoint_integerPart;
-
-use std::queue::queue_new;
-use std::queue::queue_isEmpty;
-use std::queue::queue_put;
-use std::queue::queue_get;
-use std::queue::queue_getOrDie;
 
 use std::addressSet::SetOfAddresses;
 use std::addressSet::setOfAddresses_emptySet;
@@ -78,7 +53,6 @@ use std::stack::stack_pop;
 
 use chainParameters::chainParams_speedLimitPerSecond;
 
-use inbox::IncomingRequest;
 use inbox::inbox_getNextUnpackedRequest;
 use inbox::inbox_currentArbBlockNumber;
 use inbox::inbox_currentTimestamp;

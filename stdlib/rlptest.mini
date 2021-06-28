@@ -3,14 +3,12 @@
 //
 
 use std::bytearray::ByteArray;
-use std::bytestream::ByteStream;
 use std::bytearray::MarshalledBytes;
 
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
 use std::bytearray::bytearray_marshalFull;
 use std::bytearray::bytearray_unmarshalBytes;
-use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_set256;
 
 use std::bytestream::bytestream_new;
@@ -18,18 +16,13 @@ use std::bytestream::bytestream_new;
 use std::keccak::keccak256;
 
 use std::rlp::rlp_encodeUint;
-use std::rlp::rlp_encodeAddress;
 use std::rlp::rlp_encodeBytes;
 use std::rlp::rlp_encodeList;
 use std::rlp::rlp_encodeMessageInfo;
 use std::rlp::rlp_encodeAndHashMessageInfoForSignature;
 use std::rlp::rlp_decodeMessageInfo;
-
 use std::rlp::rlp_decodeUint;
-use std::rlp::rlp_decodeAddress;
 use std::rlp::rlp_decodeBytes;
-
-use std::rlp::bytesNeededToRepresentUint;
 
 type SignedTx = struct {
     seqNum: uint,

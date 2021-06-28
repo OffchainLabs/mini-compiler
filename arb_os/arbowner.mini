@@ -5,14 +5,11 @@
 use accounts::Account;
 use accounts::getGlobalAccountStore;
 use accounts::account_getBalance;
-use accounts::account_setContractInfo;
 use accounts::accountStore_forall;
 
 use chainParameters::chainParams_getOwner;
 use chainParameters::chainParams_setOwner;
 use chainParameters::chainParams_setSecondsPerSend;
-
-use decompression::decompressAndVerifyEcdsaSignedTx;
 
 use evmCallStack::EvmCallFrame;
 use evmCallStack::evmCallStack_topFrame;
@@ -26,20 +23,14 @@ use evmCallStack::evmCallStack_setTopFrameMemory;
 use evmCallStack::evmCallStack_stackDepth;
 use evmCallStack::evmCallStack_returnFromCall;
 use evmCallStack::evmCallStack_transferEthFromCurrent;
-use evmCallStack::evmCallStack_getAccountInCurrentContext;
-use evmCallStack::evmCallStack_setAccountInCurrentContext;
-use evmCallStack::evmCallStack_getTopFrameReturnData;
 
 use evmOps::evmOp_return;
-use evmOps::evmOp_revert;
 use evmOps::evmOp_revert_knownPc;
 use evmOps::evmOp_revert_knownCodePc;
-use evmOps::evmOp_returndatasize;
 use evmOps::doCreationOpcode;
 
 use pluggables::ModuleFunction;
 use pluggables::installPluggable;
-use pluggables::callPluggable;
 use pluggables::bindContractAddressToPluggable;
 
 use gasAccounting::gasAccounting_setFeesEnabled;
@@ -58,14 +49,9 @@ use gasAccounting::allowedSenders_serialize;
 use gasAccounting::getAddressForReserveFundsDeposit;
 use gasAccounting::setL1GasPriceEstimate;
 
-use inbox::inbox_currentArbBlockNumber;
-use inbox::inbox_currentEthBlockNumber;
-use inbox::inbox_currentTimestamp;
-
 use std::bytearray::ByteArray;
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_set256;
 use std::bytearray::bytearray_extract;
@@ -80,8 +66,6 @@ use std::avmcodebuilder::avmCodeBuilder_finish;
 use std::bytestream::bytestream_new;
 
 use std::rlp::keccakOfRlpEncodedUintPair;
-
-use std::storageMap::storageMap_new;
 
 
 var upgradeInProgress: option<AvmCodeBuilder>;
@@ -522,7 +506,7 @@ impure func arbowner_getAllAllowedSenders(_topFrame: EvmCallFrame, calldata: Byt
             serialized,
             0,
             bytearray_set256(
-                bytearray_set256(bytearray_new(0), 0, 64),
+                bytearray_set256(bytearray_new(0), 0, 32),
                 32,
                 size,    // no need to round up, because size is already a multiple of 32
             ),

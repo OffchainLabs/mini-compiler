@@ -2,8 +2,6 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use std::random::RandomGenerator;  // dummy use, to work around compiler issue (error on const if not preceded by use)
-
 const MaxByteArraySize = 0x10000000000000000;
 
 

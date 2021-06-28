@@ -675,14 +675,21 @@ impl<'a> _ArbOwner<'a> {
         }
 
         if receipts[0].succeeded() {
-            let ret_data = receipts[0].get_return_data();
-            let mut ret = vec![];
-            let mut offset = 64;
-            while (offset < ret_data.len()) {
-                ret.push(Uint256::from_bytes(&ret_data[offset..offset + 32]));
-                offset += 32;
+            let decoded =
+                ethabi::decode(&[ethabi::ParamType::Bytes], &*receipts[0].get_return_data())?;
+
+            match &decoded[0] {
+                ethabi::Token::Bytes(ret_data) => {
+                    let mut ret = vec![];
+                    let mut offset = 0;
+                    while (offset < ret_data.len()) {
+                        ret.push(Uint256::from_bytes(&ret_data[offset..offset + 32]));
+                        offset += 32;
+                    }
+                    Ok(ret)
+                }
+                _ => Err(ethabi::Error::from("invalid returndata encoding")),
             }
-            Ok(ret)
         } else {
             Err(ethabi::Error::from("reverted"))
         }

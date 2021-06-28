@@ -2,22 +2,11 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use std::bytearray::ByteArray;
-use std::bls::BLSKey;
-use std::bls::BLSSignature;
-use std::bls::BLSHashedMessage;
-
 use std::bytearray::bytearray_new;
-use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
-use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_setByte;
-use std::bytearray::bytearray_set256;
 
-use std::bls::bls_verifySignature;
 use std::bls::bls_hashToPoint;
 use std::bls::bls_verifySingleSig;
-use std::bls::bls_hashAndVerifySingleSig;
 
 
 impure func main() {

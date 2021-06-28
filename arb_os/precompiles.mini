@@ -3,7 +3,6 @@
 //
 
 use accounts::AccountStore;
-use evmCallStack::EvmCallFrame;
 use std::bytearray::ByteArray;
 
 use evmCallStack::EvmCallFrame;
@@ -12,11 +11,8 @@ use evmCallStack::evmCallStack_setTopFrameMemory;
 use evmCallStack::evmCallFrame_getCalldata;
 
 use evmOps::evmOp_return;
-use evmOps::evmOp_revert;
 use evmOps::evmOp_revert_knownPc;
 
-use accounts::getGlobalAccountStore;
-use accounts::setGlobalAccountStore;
 use accounts::accountStore_get;
 use accounts::accountStore_set;
 use accounts::accountStore_createBuiltinContract;
@@ -31,7 +27,6 @@ use std::biguint::biguint_toBytes;
 
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_set256;
 use std::bytearray::bytearray_extract;

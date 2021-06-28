@@ -9,64 +9,13 @@ use std::bytestream::ByteStream;
 use evmCallStack::evmCallStack_callHitError;
 
 use std::bytestream::bytestream_new;
-use std::bytestream::bytestream_atEof;
-use std::bytestream::bytestream_bytesReadSoFar;
-use std::bytestream::bytestream_bytesRemaining;
-use std::bytestream::bytestream_truncate;
 use std::bytestream::bytestream_getByte;
-use std::bytestream::bytestream_get64;
 use std::bytestream::bytestream_getPartialWord;
-use std::bytestream::bytestream_skipBytes;
 use std::stack::stack_new;
 use std::stack::stack_push;
 use std::stack::stack_pop;
 
-use std::rlp::rlp_decodeUint;
-
-use chainParameters::chainParams_chainId;
-use gasAccounting::getGasLimitPerTx;
-
-use evmOps::evmOp_address;
-use evmOps::evmOp_balance;
-use evmOps::evmOp_selfbalance;
-use evmOps::evmOp_call;
-use evmOps::evmOp_callcode;
-use evmOps::evmOp_calldatacopy;
-use evmOps::evmOp_calldataload;
-use evmOps::evmOp_calldatasize;
-use evmOps::evmOp_caller;
-use evmOps::evmOp_callvalue;
-use evmOps::evmOp_codecopy;
-use evmOps::evmOp_codesize;
-use evmOps::evmOp_delegatecall;
-use evmOps::evmOp_extcodesize;
-use evmOps::evmOp_extcodecopy;
-use evmOps::evmOp_extcodehash;
-use evmOps::evmOp_getjumpaddr;
-use evmOps::evmOp_log0;
-use evmOps::evmOp_log1;
-use evmOps::evmOp_log2;
-use evmOps::evmOp_log3;
-use evmOps::evmOp_log4;
-use evmOps::evmOp_msize;
-use evmOps::evmOp_mload;
-use evmOps::evmOp_mstore;
-use evmOps::evmOp_mstore8;
-use evmOps::evmOp_number;
-use evmOps::evmOp_origin;
 use evmOps::evmOp_return;
-use evmOps::evmOp_returndatasize;
-use evmOps::evmOp_returndatacopy;
-use evmOps::evmOp_revert_knownPc;
-use evmOps::evmOp_selfdestruct;
-use evmOps::evmOp_sha3;
-use evmOps::evmOp_sload;
-use evmOps::evmOp_sstore;
-use evmOps::evmOp_staticcall;
-use evmOps::evmOp_stop;
-use evmOps::evmOp_timestamp;
-use evmOps::evmOp_create;
-use evmOps::evmOp_create2;
 
 use precompiles::makeTrampoline;
 

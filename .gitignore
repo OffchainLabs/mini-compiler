@@ -25,3 +25,7 @@ contracts/cache
 contracts/node_modules
 contracts/src/types
 arb_os/save_bridge_for_debugging.mini
+
+# Tooling
+flamegraph.svg
+perf.data

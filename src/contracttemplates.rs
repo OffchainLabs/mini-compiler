@@ -54,8 +54,7 @@ fn mini_code_for_templates() -> BytesMut {
     let mut buf = BytesMut::with_capacity(1024);
     buf.put(&b"// DO NOT EDIT -- this is machine-generated code.\n\n"[..]);
     buf.put(&b"use std::bytearray::MarshalledBytes;\nuse std::storageMap::StorageMap;\n\n"[..]);
-    buf.put(&b"use std::storageMap::storageMap_new;\n"[..]);
-    buf.put(&b"use std::storageMap::storageMap_set;\n\n"[..]);
+    buf.put(&b"use std::storageMap::storageMap_new;\n\n"[..]);
 
     mini_code_for_arbinfo(&mut buf);
     buf

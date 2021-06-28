@@ -10,6 +10,14 @@ use accounts::AccountStore;
 use accounts::AggregatorInfo;
 use accounts::accountStore_forall;
 
+use gasAccounting::TxGasState;
+use gasAccounting::FeeConfig;
+
+use evmCallStack::EvmCallFrame;
+
+
+use chainParameters::ChainParams;
+
 use gasAccounting::GasAccountingInfo;
 
 use tracing::EvmTracer;
@@ -36,9 +44,12 @@ use messages::TxRequestData;
 use core::kvs::Kvs;
 use core::kvs::builtin_kvsForall;
 
-
 public func set_globalCallStack_onUpgrade(_input_globals: GlobalsBeforeUpgrade) -> option<EvmCallFrame> {
     return None<EvmCallFrame>;
+}
+
+func _dummy() -> uint {
+    return 0;
 }
 
 public func set_globalAccountStore_onUpgrade(oldGlobals: GlobalsBeforeUpgrade) -> AccountStore {

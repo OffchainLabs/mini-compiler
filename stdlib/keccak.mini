@@ -6,13 +6,9 @@ use std::bytearray::ByteArray;
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_fromSizeAndBuffer;
 use std::bytearray::bytearray_get256;
-use std::bytearray::bytearray_set256;
 use std::bytearray::bytearray_get64;
-use std::bytearray::bytearray_set64;
-use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_copy;
-use std::bytearray::bytearray_extract;
 
 
 public func keccak256(ba: ByteArray, offset: uint, nbytes: uint) -> bytes32 {

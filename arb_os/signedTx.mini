@@ -2,37 +2,10 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use std::bytearray::ByteArray;
-use std::bytestream::ByteStream;
-use std::bytearray::MarshalledBytes;
-
-use std::bytearray::bytearray_new;
-use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
-use std::bytearray::bytearray_get256;
-use std::bytearray::bytearray_setByte;
-use std::bytearray::bytearray_set256;
-use std::bytearray::bytearray_extract;
-use std::bytearray::marshalledBytes_hash;
-use std::bytearray::bytearray_copy;
-
-use std::bytestream::bytestream_new;
-use std::bytestream::bytestream_skipBytes;
-
 use std::rlp::rlp_encodeAndHashMessageInfoForSignature;
-use std::rlp::rlp_decodeMessageInfo;
+use std::rlp::SignedTx;
 
 use chainParameters::chainParams_chainId;
-
-use std::keccak::keccak256;
-
-use inbox::IncomingRequest;
-
-use gasAccounting::txFeeStats_zero;
-
-use messages::TxRequestData;
-
-use std::rlp::SignedTx;
 
 
 public impure func recoverSigner(tx: SignedTx) -> option<address> {

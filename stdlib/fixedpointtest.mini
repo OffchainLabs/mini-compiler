@@ -2,14 +2,12 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use fixedpoint::FixedPoint;
 use fixedpoint::fixedPoint_new;
 use fixedpoint::fixedPoint_fromUintMatch;
 use fixedpoint::fixedPoint_integerPart;
 use fixedpoint::fixedPoint_add;
 use fixedpoint::fixedPoint_mul;
 use fixedpoint::fixedPoint_equal;
-use fixedpoint::fixedPoint_compare;
 
 
 impure func main() {

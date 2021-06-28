@@ -1,0 +1,22 @@
+//
+// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+//
+
+#[inline, print]        // <- removed trailing comma
+func main() -> uint {
+    let ret = 2;
+    ret = ret + 2;
+    return ret;
+}
+
+func other() -> uint {
+    let ret = 2;
+    
+    #[print]
+    xloop {
+        ret = ret + 1;
+    };
+    
+    return ret;
+}
+

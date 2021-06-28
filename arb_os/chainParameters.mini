@@ -3,11 +3,8 @@
 //
 
 use arbowner::arbowner_init;
-use evmCallStack::evmCallStack_callHitError;
 
-use std::bytearray::MarshalledBytes;
 use std::bytearray::ByteArray;
-use std::bytearray::MarshalledBytes;
 use std::bytearray::bytearray_get256;
 
 use std::bytestream::ByteStream;

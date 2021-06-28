@@ -3,12 +3,7 @@
 //
 
 use evmCallStack::EvmCallFrame;
-use accounts::Account;
 use std::bytearray::ByteArray;
-use std::bytearray::MarshalledBytes;
-use std::stack::Stack;
-use accounts::AccountStore;
-use std::bytestream::ByteStream;
 
 use chainParameters::chainParams_chainId;
 
@@ -18,7 +13,6 @@ use evmCallStack::evmCallStack_setAccount;
 use evmCallStack::evmCallStack_getTopFrameMemoryOrDie;
 use evmCallStack::evmCallStack_setTopFrameMemory;
 use evmCallStack::evmCallStack_callHitError;
-use evmCallStack::evmCallStack_addEvmLogToCurrent;
 use evmCallStack::evmCallStack_addStorageCharge;
 use evmCallStack::evmCallStack_inRetryable;
 
@@ -26,8 +20,6 @@ use evmCallStack::evmCallFrame_getCalldata;
 use evmCallStack::evmCallFrame_getCallvalue;
 use evmCallStack::evmCallFrame_getAccount;
 use evmCallStack::evmCallFrame_runningAsAddress;
-use evmCallStack::evmCallFrame_runningAsAccount;
-use evmCallStack::evmCallFrame_getParent;
 use evmCallStack::evmCallFrame_getCaller;
 
 use evmOps::evmOp_log4;
@@ -36,22 +28,18 @@ use evmOps::evmOp_revert_knownCodePc;
 use evmOps::evmOp_sload;
 use evmOps::evmOp_sstore;
 
-use accounts::account_getAddress;
 use accounts::account_getNextSeqNum;
 use accounts::account_getStorageCell;
 use accounts::account_deductFromEthBalance;
 use accounts::account_setBlsKey;
 use accounts::account_getBlsKey;
-use accounts::account_getAggregatorDecompressionState;
 use accounts::account_setAggregatorDecompressionState;
 
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_set256;
-use std::bytearray::bytearray_extract;
 use std::bytearray::bytearray_extract;
 use std::bytearray::bytearray_copy;
 
@@ -75,7 +63,6 @@ use decompression::addressTable_getByIndex;
 use decompression::decompressAddress;
 use decompression::getFromFunctionTable;
 use decompression::functionTableSize;
-use decompression::getFromFunctionTable;
 
 use std::rlp::rlp_encodeUint;
 use std::rlp::rlp_encodeAddress;

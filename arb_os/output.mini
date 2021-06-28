@@ -3,7 +3,6 @@
 //
 
 use std::bytearray::ByteArray;
-use std::bytearray::MarshalledBytes;
 use std::queue::Queue;
 use evmlogs::EvmLogs;
 
@@ -12,20 +11,13 @@ use arbstatistics::arbStatistics_addTxReceipt;
 use tracing::evmTracer_emitAndClear;
 
 use std::bytearray::bytearray_new;
-use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_marshalFull;
 use std::bytearray::bytearray_toSizeAndBuffer;
 use std::bytearray::bytearray_getByte;
-use std::bytearray::bytearray_get64;
-use std::bytearray::bytearray_get256;
-
-use std::keccak::keccak256_sizedBuffer;
 
 use std::merkletree::MerkleTreeBuilder;
 use std::merkletree::merkleTreeBuilder_new;
 use std::merkletree::merkleTreeBuilder_add;
 use std::merkletree::merkleTreeBuilder_finish;
-use std::merkletree::merkleTreeBuilder_isEmpty;
 
 use std::queue::queue_isEmpty;
 use std::queue::queue_new;
@@ -49,7 +41,6 @@ use gasAccounting::gasAccounting_summaryToPublish;
 
 use tracing::EvmTracer;
 use tracing::evmTracer_new;
-use tracing::evmTracer_pushReturnRevert;
 
 
 // PerBlockReceiptData is different from OutputStatistics for now; might want to unify

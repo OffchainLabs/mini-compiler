@@ -2,8 +2,6 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use std::storageMap::StorageMap;
-
 use std::storageMap::storageMap_new;
 use std::storageMap::storageMap_size;
 use std::storageMap::storageMap_get;

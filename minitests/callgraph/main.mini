@@ -1,0 +1,28 @@
+//
+// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+//
+
+use other::start;
+
+func main() -> uint {
+    return used() + used();
+}
+
+func used() -> uint {
+    return 4 + used() + start();
+}
+
+func unused() -> uint {
+    return 8 + unused();
+}
+
+func disconnected_cycle1() { disconnected_cycle2(); }
+func disconnected_cycle2() { disconnected_cycle3(); }
+func disconnected_cycle3() { disconnected_cycle1(); }
+
+public func externally_used() -> uint {
+    return 4;
+}
+public func externally_unused() -> uint {
+    return 8;
+}

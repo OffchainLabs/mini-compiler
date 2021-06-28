@@ -20,7 +20,7 @@ ARBOSCONTRACTS = $(ACBUILDDIR)/ArbAddressTable.sol/ArbAddressTable.json $(ACBUIL
 
 COMPILEFLAGS = -c "arb_os/constants.json" -i "none"
 COMPILEFLAGSNOINLINE = -c "arb_os/constants.json"
-
+EXTRACOMPILEFLAGSFORARBOS = -m
 
 all: $(ARBOSCONTRACTS) $(TESTFILES) $(TESTCONTRACTS) $(TEMPLATES) $(UPGRADEFILES) arbos upgrade test
 arbos: $(ARBOSDIR)/arbos.mexe
@@ -103,11 +103,11 @@ $(UPGRADETESTDIR)/upgrade2_new.mexe: compiler $(UPGRADETESTDIR)/upgrade2_old.mex
 
 $(ARBOSDIR)/arbos-upgrade.mexe: compiler $(TESTCONTRACTS) $(ARBOSDIR) $(STDDIR) $(BUILTINDIR) $(TEMPLATES) src/compile/miniconstants.rs
 	cp $(ARBOSDIR)/dummy_version_bridge.mini $(ARBOSDIR)/bridge_arbos_versions.mini
-	$(CARGORUN) compile "arb_os" -o "arb_os/arbos-upgrade.mexe" $(COMPILEFLAGS)
+	$(CARGORUN) compile "arb_os" -o "arb_os/arbos-upgrade.mexe" $(COMPILEFLAGS) $(EXTRACOMPILEFLAGSFORARBOS)
 	$(CARGORUN) gen-upgrade-code $(ARBOSDIR)/arbos_before.mexe $(ARBOSDIR)/arbos-upgrade.mexe $(ARBOSDIR)/bridge_arbos_versions.mini customize_arbos_bridge_versions $(ARBOSDIR)/upgrade.toml
-	$(CARGORUN) compile "arb_os" -o "arb_os/arbos-upgrade.mexe" $(COMPILEFLAGS)
+	$(CARGORUN) compile "arb_os" -o "arb_os/arbos-upgrade.mexe" $(COMPILEFLAGS) $(EXTRACOMPILEFLAGSFORARBOS)
 	$(CARGORUN) gen-upgrade-code $(ARBOSDIR)/arbos_before.mexe $(ARBOSDIR)/arbos-upgrade.mexe $(ARBOSDIR)/bridge_arbos_versions.mini customize_arbos_bridge_versions $(ARBOSDIR)/upgrade.toml
-	$(CARGORUN) compile "arb_os" -o "arb_os/arbos-upgrade.mexe" $(COMPILEFLAGS)
+	$(CARGORUN) compile "arb_os" -o "arb_os/arbos-upgrade.mexe" $(COMPILEFLAGS) $(EXTRACOMPILEFLAGSFORARBOS)
 	cp $(ARBOSDIR)/bridge_arbos_versions.mini $(ARBOSDIR)/save_bridge_for_debugging.mini
 	cp $(ARBOSDIR)/dummy_version_bridge.mini $(ARBOSDIR)/bridge_arbos_versions.mini
 
@@ -118,7 +118,7 @@ $(BUILTINDIR)/maptest.mexe: compiler $(BUILTINMAOS) $(BUILTINDIR)/maptest.mini
 	$(CARGORUN) compile $(BUILTINDIR)/maptest.mini -o $(BUILTINDIR)/maptest.mexe $(COMPILEFLAGS) -t
 
 $(ARBOSDIR)/arbos.mexe: compiler $(TESTCONTRACTS) $(ARBOSDIR) $(STDDIR) $(BUILTINDIR) $(TEMPLATES) src/compile/miniconstants.rs
-	$(CARGORUN) compile "arb_os" -o "arb_os/arbos.mexe" $(COMPILEFLAGS)
+	$(CARGORUN) compile "arb_os" -o "arb_os/arbos.mexe" $(COMPILEFLAGS) $(EXTRACOMPILEFLAGSFORARBOS)
 
 $(TESTCONTRACTSPURE): $(TCSRCDIR)
 	(cd contracts; yarn install; yarn build)

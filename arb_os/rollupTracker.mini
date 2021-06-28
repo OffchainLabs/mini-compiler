@@ -2,10 +2,6 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use accounts::getGlobalAccountStore;
-use accounts::setGlobalAccountStore;
-use accounts::accountStore_transferEthBalance;
-
 use pluggables::ModuleFunction;
 use pluggables::installPluggable;
 
@@ -19,7 +15,6 @@ use std::queue::Queue;
 use std::queue::queue_new;
 use std::queue::queue_put;
 use std::queue::queue_get;
-use std::queue::queue_getOrDie;
 use std::queue::queue_nth;
 use std::queue::queue_set_nth;
 

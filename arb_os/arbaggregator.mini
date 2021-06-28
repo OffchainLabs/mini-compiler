@@ -2,10 +2,6 @@
 // Copyright 2021, Offchain Labs, Inc. All rights reserved.
 //
 
-use accounts::getGlobalAccountStore;
-use accounts::setGlobalAccountStore;
-use accounts::accountStore_get;
-use accounts::accountStore_set;
 use accounts::account_setAggregatorToPay;
 use accounts::account_getAggregatorToPayAsOption;
 use accounts::account_getFeeCollector;

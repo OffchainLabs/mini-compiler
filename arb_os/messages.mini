@@ -4,30 +4,19 @@
 
 
 use std::bytearray::ByteArray;
-use std::bytestream::ByteStream;
-use std::bytearray::MarshalledBytes;
-use accounts::AccountStore;
-use accounts::Account;
 use evmlogs::EvmLogs;
-use std::storageMap::StorageMap;
 
 use accounts::getGlobalAccountStore;
 use accounts::setGlobalAccountStore;
 use accounts::accountStore_get;
 use accounts::accountStore_set;
-use accounts::accountStore_transferEthBalance;
-use accounts::accountStore_createAccountFromEvmCode;
 use accounts::account_checkAndIncrSeqNum;
 use accounts::account_fetchAndIncrSeqNum;
 use accounts::account_hasContract;
-
-use accounts::account_incrSeqNum;
 use accounts::account_getNextSeqNum;
-use accounts::account_getStartCodePoint;
 
 use evmCallStack::initEvmCallStack;
 use evmCallStack::initEvmCallStackForConstructor;
-use evmCallStack::evmCallStack_runningCodeFromAccount;
 
 use gasAccounting::GasUsage;
 use gasAccounting::TxFeeStats;
@@ -37,22 +26,10 @@ use output::emitTxReceipt;
 use retrybuffer::RetryableTx;
 
 use std::bytearray::bytearray_new;
-use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_extract;
-
-use std::bytestream::bytestream_new;
-use std::bytestream::bytestream_getByte;
-use std::bytestream::bytestream_get256;
-use std::bytestream::bytestream_skipBytes;
-use std::bytestream::bytestream_getRemainingBytes;
 
 use std::rlp::keccakOfRlpEncodedUintPair;
 
-use codeSegment::translateEvmCodeSegment;
-
 use inbox::IncomingRequest;
-
-use gasAccounting::GasUsage;
 
 
 impure func verifyAndIncrSequenceNum(addr: address, seqNum: uint) -> option<()> {

@@ -25,7 +25,6 @@ use std::bytestream::bytestream_skipBytes;
 use std::keccak::keccak256;
 use std::keccak::hasher_new;
 use std::keccak::hasher_pushByte;
-use std::keccak::hasher_pushN_le;
 use std::keccak::hasher_pushN_be;
 use std::keccak::hasher_finish;
 

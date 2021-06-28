@@ -4,23 +4,14 @@
 // ported from https://github.com/thehubbleproject/RedditHubble/blob/master/contracts/libs/BLS.sol
 
 use std::bytearray::ByteArray;
-use std::random::RandomGenerator;
 
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_set256;
 use std::bytearray::bytearray_copy;
 
-use std::keccak::keccak256;
-
-use std::random::random_new;
-use std::random::random_next;
-use std::random::random_nextMod;
-
-use std::keccak::keccak256;
 use std::sha256::sha256_byteArray;
 
 

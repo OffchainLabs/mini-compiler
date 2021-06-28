@@ -6,7 +6,6 @@ use std::queue::Queue;
 use std::queue::queue_new;
 use std::queue::queue_isEmpty;
 use std::queue::queue_get;
-use std::queue::queue_getOrDie;
 use std::queue::queue_put;
 use std::queue::QueueStack;
 use std::queue::queuestack_new;
@@ -23,14 +22,12 @@ use blockhash::blockhash_submitHash;
 
 use chainParameters::chainParams_gotParamsMessage;
 use chainParameters::chainParams_chainId;
-use chainParameters::haveReceivedChainInitMessage;
 
 use gasAccounting::updateL1GasPriceEstimate;
 use gasAccounting::txFeeStats_zero;
 
 use messages::TxRequestData;
 
-use messageBatch::MessageBatch;
 use messageBatch::messageBatch_tryNew;
 use messageBatch::messageBatch_get;
 
@@ -49,12 +46,10 @@ use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_getCalldataUnits;
 
-use std::bytestream::ByteStream;
 use std::bytestream::bytestream_new;
 use std::bytestream::bytestream_getByte;
 use std::bytestream::bytestream_get256;
 use std::bytestream::bytestream_getRemainingBytes;
-use std::bytestream::bytestream_skipBytes;
 
 use std::keccak::keccak256;
 

@@ -11,12 +11,9 @@ use accounts::accountStore_setRetryBuffer;
 use accounts::accountStore_transferEthBalance;
 use accounts::accountStore_newEscrow;
 use accounts::accountStore_payFromEscrow;
-use accounts::account_getBalance;
 use accounts::account_addToEthBalance;
 
 use evmCallStack::evmCallStack_isEmpty;
-use evmCallStack::evmCallStack_getAccountInCurrentContext;
-use evmCallStack::evmCallStack_setAccountInCurrentContext;
 use evmCallStack::getRetryBufferInCurrentContext;
 use evmCallStack::setRetryBufferInCurrentContext;
 use evmCallStack::evmCallStack_callRetryableTxAndReturn;
@@ -31,10 +28,6 @@ use gasAccounting::GasUsage;
 use gasAccounting::txFeeStats_zero;
 use gasAccounting::getFeesForRetryableTx;
 use gasAccounting::getRetryableTxPrice;
-use gasAccounting::txFeeStats_zero;
-use gasAccounting::getArbGasPrice;
-use gasAccounting::getCurrentBlockGasLimit;
-use gasAccounting::txFeeStats_zero;
 
 use inbox::IncomingRequest;
 use inbox::GasEstimationParams;
@@ -52,8 +45,6 @@ use std::bytearray::bytearray_set256;
 use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_extract;
 use std::bytearray::bytearray_copy;
-
-use std::keccak::keccak256;
 
 use std::queue::Queue;
 use std::queue::queue_new;

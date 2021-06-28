@@ -12,7 +12,6 @@ use std::bytearray::bytearray_copy;
 
 use std::bytestream::bytestream_new;
 
-use std::storageMap::storageMap_new;
 use std::storageMap::storageMap_serialize;
 use std::storageMap::storageMap_deserialize;
 

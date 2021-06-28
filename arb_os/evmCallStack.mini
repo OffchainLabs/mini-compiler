@@ -2,16 +2,12 @@
 // Copyright 2020-2021, Offchain Labs, Inc. All rights reserved.
 //
 
-use inbox::IncomingRequest;
 use accounts::AccountStore;
 use accounts::Account;
 use evmlogs::EvmLogs;
 use std::queue::Queue;
 use std::bytearray::ByteArray;
-use std::bytestream::ByteStream;
-use std::bytearray::MarshalledBytes;
 use std::stack::Stack;
-use std::storageMap::StorageMap;
 use messages::TxRequestData;
 
 use errorHandler::errorHandler;
@@ -25,21 +21,15 @@ use accounts::accountStore_getRetryBuffer;
 use accounts::accountStore_setRetryBuffer;
 use accounts::accountStore_transferEthBalance;
 use accounts::accountStore_destroyAccount;
-use accounts::accountStore_cloneContract;
 use accounts::accountStore_createOrAddCodeRef;
-use accounts::accountStore_codeRefExists;
-use accounts::accountStore_getEscrowBalance;
 use accounts::accountStore_payFromEscrow;
 use accounts::account_setStorageCell;
 use accounts::account_getBalance;
 use accounts::account_getAllStorage;
 use accounts::account_getStartCodePoint;
 use accounts::account_setContractInfo;
-use accounts::account_fetchAndIncrSeqNum;
 use accounts::account_incrSeqNum;
 use accounts::account_getStorageSize;
-use accounts::account_isEmpty;
-use accounts::pristineAccount;
 
 use codeSegment::getDummyAcceptContractCode;
 
@@ -54,11 +44,8 @@ use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
 use std::bytearray::bytearray_extract;
 use std::bytearray::bytearray_copy;
-use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_set256;
 use std::bytestream::bytestream_new;
-
-use std::keccak::keccak256;
 
 use std::storageMap::storageMap_new;
 
@@ -78,7 +65,6 @@ use gasAccounting::gasAccounting_startTxCharges;
 use gasAccounting::gasAccounting_endTxCharges;
 use gasAccounting::gasAccounting_pauseTxCharges;
 use gasAccounting::gasAccounting_resumeTxCharges;
-use gasAccounting::gasAccounting_getGasChargeAmountInArbGas;
 use gasAccounting::txFeeStats_zero;
 use gasAccounting::getAddressForReserveFundsDeposit;
 use gasAccounting::deferredPayments_apply;
@@ -208,8 +194,8 @@ public impure func evmCallStack_makeEmpty() {
     globalCallStack = None<EvmCallFrame>;
 }
 
-public impure func evmCallStack_isEmpty() -> bool {
-    return globalCallStack == None<EvmCallFrame>;
+public impure func evmCallStack_isEmpty() -> bool {                                                 
+    return globalCallStack == None<EvmCallFrame>;                                                   
 }
 
 public impure func evmCallStack_currentTxRequestGasBid() -> uint {

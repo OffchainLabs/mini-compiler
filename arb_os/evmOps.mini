@@ -2,20 +2,13 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use accounts::Account;
-use evmCallStack::EvmCallFrame;
-use evmlogs::EvmLogs;
 use std::avmcodebuilder::AvmCodePoint;
 use std::bytearray::ByteArray;
-use std::bytestream::ByteStream;
-use std::bytearray::MarshalledBytes;
 use std::stack::Stack;
-use std::storageMap::StorageMap;
 
 use blockhash::blockhash_getForBlock;
 
 use chainParameters::chainParams_chainId;
-use errorHandler::errorHandler;
 
 use evmCallStack::evmCallStack_stackInfo;
 use evmCallStack::evmCallStack_topFrame;
@@ -42,10 +35,8 @@ use evmCallStack::evmCallFrame_runningCodeFromAccount;
 use evmCallStack::evmCallFrame_getAccount;
 use evmCallStack::evmCallFrame_getCaller;
 use evmCallStack::evmCallFrame_getMemory;
-use evmCallStack::evmCallFrame_getResumeCodePoint;
 use evmCallStack::evmCallFrame_getCallvalue;
 use evmCallStack::evmCallFrame_getCalldata;
-use evmCallStack::evmCallFrame_getEvmLogs;
 use evmCallStack::evmCallFrame_shouldRevertOnStorageWrite;
 
 use accounts::accountStore_createOrAddCodeRef;
@@ -69,8 +60,6 @@ use std::storageMap::storageMap_new;
 use evmCallStack::evmCallStack_currentTimestamp;
 use evmCallStack::evmCallStack_currentEthBlockNumber;
 
-use evmlogs::evmlogs_empty;
-
 use gasAccounting::getArbGasPrice;
 use gasAccounting::getCurrentBlockGasLimit;
 
@@ -79,7 +68,6 @@ use tracing::evmTracer_pushCreate2;
 
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
-use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_set256;
@@ -88,8 +76,6 @@ use std::bytearray::bytearray_copy;
 use std::bytearray::bytearray_toSizeAndBuffer;
 use std::bytestream::bytestream_new;
 
-use std::stack::stack_pop;
-use std::stack::stack_isEmpty;
 use std::stack::stack_discardDeepestItems;
 
 use codeSegment::translateEvmCodeSegment;

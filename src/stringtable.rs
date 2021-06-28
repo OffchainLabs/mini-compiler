@@ -42,8 +42,8 @@ impl StringTable {
     }
 
     ///If an ID exists, returns it, if not returns `None`.
-    pub fn get_if_exists(&self, name: &str) -> Option<&StringId> {
-        self.table.get(name)
+    pub fn get_if_exists(&self, name: &str) -> Option<StringId> {
+        self.table.get(name).cloned()
     }
 
     ///Takes a `usize` ID and returns the associated `String`

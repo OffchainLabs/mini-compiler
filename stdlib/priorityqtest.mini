@@ -2,13 +2,10 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use std::priorityq::PriorityQ;
-
 use std::priorityq::priorityq_new;
 use std::priorityq::priorityq_isEmpty;
 use std::priorityq::priorityq_insert;
 use std::priorityq::priorityq_get;
-use std::priorityq::priorityq_printAsArray;
 
 
 impure func main() {

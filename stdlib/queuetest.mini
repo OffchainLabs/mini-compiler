@@ -2,8 +2,6 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
-use std::queue::Queue;
-
 use std::queue::queue_new;
 use std::queue::queue_isEmpty;
 use std::queue::queue_put;

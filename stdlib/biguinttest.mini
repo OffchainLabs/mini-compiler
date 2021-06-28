@@ -8,7 +8,6 @@ use std::biguint::biguint_divmod;
 use std::biguint::biguint_equal;
 use std::biguint::biguint_fromUint;
 use std::biguint::biguint_isZero;
-use std::biguint::biguint_marshal;
 use std::biguint::biguint_mod;
 use std::biguint::biguint_modmul;
 use std::biguint::biguint_modexp;
