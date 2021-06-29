@@ -89,12 +89,16 @@ public impure func arbowner_txcall() {
         let funcCode = asm(224, bytearray_get256(calldata, 0)) uint { shr };
         if (funcCode == const::funcCode_ArbOwner_startCodeUpload) {
             arbowner_startCodeUpload(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbOwner_startCodeUploadWithCheck) {
+            arbowner_startCodeUploadWithCheck(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_continueCodeUpload) {
             arbowner_continueCodeUpload(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_getUploadedCodeHash) {
             arbowner_getUploadedCodeHash(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_finishCodeUploadAsArbosUpgrade) {
            arbowner_finishCodeUploadAsArbosUpgrade(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbOwner_getLastUpgradeHash) {
+           arbowner_getLastUpgradeHash(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_finishCodeUploadAsPluggable) {
            arbowner_finishCodeUploadAsPluggable(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_addToReserveFunds) {
@@ -156,10 +160,23 @@ impure func arbowner_addToReserveFunds(topFrame: EvmCallFrame, calldata: ByteArr
 
 impure func arbowner_startCodeUpload(_topFrame: EvmCallFrame, calldata: ByteArray) { // ()
     if (bytearray_size(calldata) != 4) {
-        evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 20, 0, 0);
+        evmOp_revert_knownPc(20, 0, 0);
     }
     upgradeInProgress = Some(avmCodeBuilder_new(false));
     evmOp_return(0, 0);
+}
+
+impure func arbowner_startCodeUploadWithCheck(_topFrame: EvmCallFrame, calldata: ByteArray) { // ()
+    if (bytearray_size(calldata) != 36) {
+        evmOp_revert_knownPc(20, 0, 0);
+    }
+    let oldCodeHash = bytes32(bytearray_get256(calldata, 4));
+    if ((oldCodeHash == bytes32(0)) || (oldCodeHash == previousArbosUpgradeHash)) {
+        upgradeInProgress = Some(avmCodeBuilder_new(false));
+        evmOp_return(0, 0);
+    } else {
+        evmOp_revert_knownPc(21, 0, 0);
+    }
 }
 
 impure func arbowner_continueCodeUpload(_topFrame: EvmCallFrame, calldata: ByteArray) { // (bytes)
@@ -555,6 +572,18 @@ impure func arbowner_getAllFairGasPriceSenders(_topFrame: EvmCallFrame, calldata
     }
 }
 
+// function getLastUpgradeHash() external view returns(bytes32);
+impure func arbowner_getLastUpgradeHash(_topFrame: EvmCallFrame, calldata: ByteArray) {
+    if (bytearray_size(calldata) != 4) {
+        evmOp_revert_knownPc(190, 0, 0);
+    }
+    let mem = bytearray_set256(bytearray_new(0), 0, uint(previousArbosUpgradeHash));
+    if (evmCallStack_setTopFrameMemory(mem)) {
+        evmOp_return(0, 32);
+    } else {
+        evmOp_revert_knownPc(191, 0, 0);
+    }
+}
 
 
 
