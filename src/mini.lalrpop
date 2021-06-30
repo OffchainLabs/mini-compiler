@@ -109,6 +109,85 @@ Attributes: Attributes = {
 
 StatementKind: StatementKind = {
 	"while" "(" <e: Expr> ")" <cb: CodeBlock> => StatementKind::While(e, cb),
+	<lno: @L> "for" <i:Ident> "start-from" <l:UnsignedInteger> "run-to" <u:UnsignedInteger> <mut cb:CodeBlock> =>
+    StatementKind::Expression(
+        Expr {
+            kind:
+                ExprKind::CodeBlock(
+                    CodeBlock::new(
+                        vec![
+                            Statement {
+                                kind:
+                                    StatementKind::Let(
+                                        MatchPattern::new_simple(i,()),
+                                        Expr {
+                                            kind: ExprKind::Constant(Constant::Uint(l)),
+                                            debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename))
+                                        }
+                                    ),
+                                debug_info:
+                                    DebugInfo::from(file_info.location(BytePos::from(lno),filename))
+                            },
+                            Statement {
+                                kind:
+                                    StatementKind::While(
+                                        Expr {
+                                            kind:
+                                                ExprKind::Binary(
+                                                    BinaryOp::LessThan,
+                                                    Box::new(
+                                                        Expr {
+                                                            kind: ExprKind::VariableRef(i),
+                                                            debug_info: DebugInfo::from(file_info.location(BytePos::from(lno), filename))
+                                                        }
+                                                    ),
+                                                    Box::new(Expr {
+                                                        kind:
+                                                            ExprKind::Constant(Constant::Uint(u)),
+                                                        debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename)),
+                                                    })
+                                                ),
+                                            debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename))
+                                        },
+                                        {
+                                            cb.push(
+                                                Statement {
+                                                    kind: StatementKind::Assign(
+                                                        i,
+                                                        Expr {
+                                                            kind: ExprKind::Binary(
+                                                                BinaryOp::Plus,
+                                                                Box::new(
+                                                                    Expr {
+                                                                        kind: ExprKind::VariableRef(i),
+                                                                        debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename)),
+                                                                    }
+                                                                ),
+                                                                Box::new(
+                                                                    Expr {
+                                                                        kind: ExprKind::Constant(Constant::Uint(Uint256::one())),
+                                                                        debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename)),
+                                                                    }
+                                                                ),
+                                                            ),
+                                                            debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename)),
+                                                        },
+                                                    ),
+                                                    debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename)),
+                                                }
+                                            );
+                                            cb
+                                        }
+                                    ),
+                                debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename)),
+                            }
+                        ],
+                        None
+                    )
+                ),
+            debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename))
+        }
+    ),
 	<lno: @L> "loop" <cb: CodeBlock> => StatementKind::Expression(Expr { kind: ExprKind::Loop(cb), debug_info: DebugInfo::from(file_info.location(BytePos::from(lno), filename)), }),
 	<lno: @L> "if" "let" "Some(" <l: Ident> ")" "=" <r:Expr> <t: CodeBlock> <e: ElseIf?> => StatementKind::Expression( Expr { kind: ExprKind::IfLet(l,Box::new(r),CodeBlock::new(t,None),e), debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename))}),
 	<lno: @L> "if" "(" <c: Expr> ")" <t: CodeBlock> <r: ElseIf?> => StatementKind::Expression( Expr { kind: ExprKind::If(Box::new(c), CodeBlock::new(t, None), r), debug_info: DebugInfo::from(file_info.location(BytePos::from(lno),filename))}),
