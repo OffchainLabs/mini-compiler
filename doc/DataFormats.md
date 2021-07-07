@@ -89,7 +89,7 @@ A message of this type directs ArbOS to end the current Arbitrum block and start
 
 **Message type 7: L2 transaction funded by L1**
 
-This message type encodes an L2 transaction that is funded by calldata provided at L1. The type-specific data must be the same as an L2 message of subtype 0 or 1.
+This message type encodes an L2 transaction that is funded by value provided at L1. The type-specific data must be the same as an L2 message of subtype 0 or 1.
 
 **Message type 8: Rollup protocol event**
 

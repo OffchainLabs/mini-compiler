@@ -75,8 +75,6 @@ use codeSegment::translateEvmCodeSegment;
 use output::emitTxReceipt;
 use output::queueMessageForSend;
 
-use main::mainRunLoop;
-
 use output::outbox_append;
 use output::sendQueuedMessages;
 
@@ -84,6 +82,7 @@ use inbox::IncomingRequest;
 use inbox::inbox_currentArbBlockNumber;
 use inbox::inbox_currentEthBlockNumber;
 use inbox::inbox_currentTimestamp;
+use inbox::mainRunLoop;
 
 use retrybuffer::RetryBuffer;
 use retrybuffer::RetryableTx;

@@ -4,10 +4,12 @@
 
 use evmCallStack::emptyAvmStack;
 use evmCallStack::cleanAvmAuxStackAndCall;
-use main::mainRunLoop;
 use evmCallStack::evmCallStack_isEmpty;
 use evmCallStack::evmCallStack_callHitError;
 use evmCallStack::evmCallStack_stackInfo;
+
+use inbox::mainRunLoop;
+
 
 var inErrorHandler: bool;
 

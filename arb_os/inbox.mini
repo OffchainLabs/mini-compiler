@@ -17,21 +17,29 @@ use accounts::setGlobalAccountStore;
 use accounts::accountStore_get;
 use accounts::accountStore_set;
 use accounts::account_addToEthBalance;
+use accounts::account_checkAndIncrSeqNum;
 
 use blockhash::blockhash_submitHash;
 
 use chainParameters::chainParams_gotParamsMessage;
 use chainParameters::chainParams_chainId;
 
+use evmlogs::EvmLogs;
+
+use gasAccounting::GasUsage;
+use gasAccounting::allowedSenders_contains;
+use gasAccounting::gasAccounting_prepareTx;
 use gasAccounting::updateL1GasPriceEstimate;
 use gasAccounting::txFeeStats_zero;
 
 use messages::TxRequestData;
+use messages::processL2Request;
 
 use messageBatch::messageBatch_tryNew;
 use messageBatch::messageBatch_get;
 
 use output::outputStats_endOfBlock;
+use output::emitTxReceipt;
 
 use retrybuffer::RetryableTx;
 use retrybuffer::processRetryableTx;
@@ -301,144 +309,188 @@ func hashIncomingRequest(req: IncomingRequest) -> bytes32 {
     );
 }
 
-public impure func inbox_getNextUnpackedRequest() -> TxRequestData {
-    let msg = unsafecast<IncomingRequest>(());   // value will be re-initialized before use
-    
-    return xloop {
+public impure func mainRunLoop() {
+    loop {
         if let Some(res) = txRequestQueue_get(globalInputQueue.txQ) {
             let (newQ, tx) = res;
             globalInputQueue = globalInputQueue with {
                 txQ: newQ
             };
-            return unsafecast<TxRequestData>(tx);
-        }
-        if let Some(res) = incomingRequestQueueStack_get(globalInputQueue.batchQ) {
-            let (newQ, umsg) = res;
-            globalInputQueue = globalInputQueue with {
-                batchQ: newQ
-            };
-            msg = umsg;
+            handleArrivingTx(unsafecast<TxRequestData>(tx));
         } else {
-            msg = inbox_get();
-        }
-
-        if let Some(batch) = messageBatch_tryNew(msg) {
-            // it's a batch message, so unpack its components and queue them
-            let moreToDo = true;
-            let queue = incomingRequestQueue_new();
-            while (moreToDo) {
-                if let Some(res) = messageBatch_get(batch) {
-                    let (newMsg, restOfBatch) = res;
-                    queue = incomingRequestQueue_put(queue, newMsg);
-                    batch = restOfBatch;
-                } else {
-                    moreToDo = false;
-                }
-            }
-            globalInputQueue = globalInputQueue with {
-                batchQ: incomingRequestQueueStack_push(globalInputQueue.batchQ, queue)
-            };
-        } else {
-            // it's not a batch, so process it immediately
-            if (msg.kind == const::L1MessageType_L2FundedByL1) {
-                // record the calldata usage, so it can be reported in tx receipt
-                msg = msg with {
-                    aggregator: Some(struct {
-                        aggregator: None<address>,
-                        calldataUnits: bytearray_getCalldataUnits(msg.msgData),
-                    })
+            let msg = xif let Some(res) = incomingRequestQueueStack_get(globalInputQueue.batchQ) {
+                let (newQ, umsg) = res;
+                globalInputQueue = globalInputQueue with {
+                    batchQ: newQ
                 };
-
-                // the message carries an ETH deposit
-                // verify the validity of the message, process the deposit, then process the tx
-                let firstByte = bytearray_getByte(msg.msgData, 0);
-                if (firstByte == const::L2MessageType_unsignedEOATx) {
-                    let callvalue = bytearray_get256(msg.msgData, 1+4*32);
-                    let gAcctStore = getGlobalAccountStore();
-                    setGlobalAccountStore(
-                        accountStore_set(
-                            gAcctStore,
-                            msg.sender,
-                            account_addToEthBalance(accountStore_get(gAcctStore, msg.sender), callvalue)
-                        )
-                    );
-                    if let Some(txRequest) = translateUnsignedTx(msg) {
-                        return txRequest;
-                    }
-                    // else request was malformatted, ignore it and execute loop again to get another
-                    //     but don't undo the deposit
-                } elseif (firstByte == const::L2MessageType_unsignedContractTx) {
-                    let callvalue = bytearray_get256(msg.msgData, 1+3*32);
-                    let gAcctStore = getGlobalAccountStore();
-                    setGlobalAccountStore(
-                        accountStore_set(
-                            gAcctStore,
-                            msg.sender,
-                            account_addToEthBalance(accountStore_get(gAcctStore, msg.sender), callvalue)
-                        )
-                    );
-                    if let Some(txRequest) = translateUnsignedTx(msg) {
-                        return txRequest;
-                    }
-                    // else request was malformatted, ignore it and execute loop again to get another
-                    //     but don't undo the deposit
-                }
-                // else L2 msg type is invalid in ETH deposit message, ignore msg and execute loop again to get another
-                //      note that deposit doesn't happen in this case
-            } elseif (msg.kind == const::L1MessageType_endOfBlock) {
-                // it's an end-of-block message, so just trigger end-of-block processing
-                outputStats_endOfBlock(msg.arbBlockNumber, msg.ethBlockNumber, msg.timestamp);
-                blockhash_submitHash(msg.ethBlockNumber, globalInbox.inboxHashAccumulator);
-                globalInbox = globalInbox with {
-                    arbBlockNum: globalInbox.arbBlockNum + 1
-                };
-            } elseif (msg.kind == const::L1MessageType_L2 || msg.kind == const::L1MessageType_L2ForGasEstimation) {
-                // record the calldata usage, so it can be reported in tx receipt
-                msg = msg with {
-                    aggregator: Some(struct {
-                        aggregator: xif let Some(aggInfo) = msg.aggregator { aggInfo.aggregator } else { None<address> },
-                        calldataUnits: bytearray_getCalldataUnits(msg.msgData),
-                    })
-                };
-
-                // it's an L2 message, so switch based on the L2 type
-                let firstByte = bytearray_getByte(msg.msgData, 0);
-                if (firstByte == const::L2MessageType_heartbeat) {
-                    // it's a heartbeat message, don't do anything
-                } elseif (firstByte == const::L2MessageType_signedCompressedTx) {
-                    // it's a single message with compressed headers
-                    if let Some(txRequest) = decompressAndVerifyEcdsaSignedTx(msg.msgData, msg) {
-                        return txRequest;
-                    }
-                    // else signature was invalid, ignore msg and execute loop again to get another
-                } elseif (firstByte == const::L2MessageType_blsBatch) {
-                    if let Some(updatedQ) = decompressAndVerifyBLSSignedTxBatch(
-                        msg.msgData,
-                        msg,
-                        unsafecast<Queue>(globalInputQueue.txQ)
-                    ) {
-                        globalInputQueue = globalInputQueue with { txQ: unsafecast<TxRequestQueue>(updatedQ) };
-                    }
-                    // else BLS batch was bad, so ignore it
-                } else {
-                    // subtype must be unsigned EOA, unsigned contract, or nonmutating
-                    if let Some(txRequest) = translateUnsignedTx(msg) {
-                        return txRequest;
-                    }
-                    // else request was malformatted, ignore it and execute loop again to get another
-                }
-            } elseif (msg.kind == const::L1MessageType_rollupProtocolEvent) {
-                // ignore this message type, and execute loop again to get another message
-            } elseif (msg.kind == const::L1MessageType_submitRetryableTx) {
-                if let Some(txRequest) = processRetryableTx(msg) {
-                    return txRequest;
-                }
-                // submission failed, or no immediate tx included; either way, loop back to get next message
+                umsg
             } else {
-                // invalid message type -- ignore it
+                inbox_get()
+            };
+
+            if let Some(batch) = messageBatch_tryNew(msg) {
+                // it's a batch message, so unpack its components and queue them
+                let moreToDo = true;
+                let queue = incomingRequestQueue_new();
+                while (moreToDo) {
+                    if let Some(res) = messageBatch_get(batch) {
+                        let (newMsg, restOfBatch) = res;
+                        queue = incomingRequestQueue_put(queue, newMsg);
+                        batch = restOfBatch;
+                    } else {
+                        moreToDo = false;
+                    }
+                }
+                globalInputQueue = globalInputQueue with {
+                    batchQ: incomingRequestQueueStack_push(globalInputQueue.batchQ, queue)
+                };
+            } elseif (    (msg.kind == const::L1MessageType_L2 || msg.kind == const::L1MessageType_L2ForGasEstimation)
+                       && (bytearray_getByte(msg.msgData, 0) == const::L2MessageType_blsBatch) ) {
+               if let Some(updatedQ) = decompressAndVerifyBLSSignedTxBatch(
+                    msg.msgData,
+                    msg,
+                    unsafecast<Queue>(globalInputQueue.txQ)
+                ) {
+                    globalInputQueue = globalInputQueue with { txQ: unsafecast<TxRequestQueue>(updatedQ) };
+                }
+                // else BLS batch was bad, so ignore it
+            } else {
+                handleUnpackedMessage(msg);
             }
         }
+    }
+}
+
+impure func handleUnpackedMessage(msg: IncomingRequest) {
+    if (msg.kind == const::L1MessageType_L2FundedByL1) {
+        // record the calldata usage, so it can be reported in tx receipt
+        msg = msg with {
+            aggregator: Some(struct {
+                aggregator: None<address>,
+                calldataUnits: bytearray_getCalldataUnits(msg.msgData),
+            })
+        };
+
+        // the message carries an ETH deposit
+        // verify the validity of the message, process the deposit, then process the tx
+        let firstByte = bytearray_getByte(msg.msgData, 0);
+        if (firstByte == const::L2MessageType_unsignedEOATx) {
+            let callvalue = bytearray_get256(msg.msgData, 1+4*32);
+            let gAcctStore = getGlobalAccountStore();
+            setGlobalAccountStore(
+                accountStore_set(
+                    gAcctStore,
+                    msg.sender,
+                    account_addToEthBalance(accountStore_get(gAcctStore, msg.sender), callvalue)
+                )
+            );
+            if let Some(txRequest) = translateUnsignedTx(msg) {
+                handleArrivingTx(txRequest);
+            }
+            // else request was malformatted, ignore it but don't undo the deposit
+        } elseif (firstByte == const::L2MessageType_unsignedContractTx) {
+            let callvalue = bytearray_get256(msg.msgData, 1+3*32);
+            let gAcctStore = getGlobalAccountStore();
+            setGlobalAccountStore(
+                accountStore_set(
+                    gAcctStore,
+                    msg.sender,
+                    account_addToEthBalance(accountStore_get(gAcctStore, msg.sender), callvalue)
+                )
+            );
+            if let Some(txRequest) = translateUnsignedTx(msg) {
+                handleArrivingTx(txRequest);
+            }
+            // else request was malformatted, ignore it but don't undo the deposit
+        }
+        // else L2 msg type is invalid in ETH deposit message, ignore msg
+        //      note that deposit doesn't happen in this case
+    } elseif (msg.kind == const::L1MessageType_endOfBlock) {
+        // it's an end-of-block message, so just trigger end-of-block processing
+        outputStats_endOfBlock(msg.arbBlockNumber, msg.ethBlockNumber, msg.timestamp);
+        blockhash_submitHash(msg.ethBlockNumber, globalInbox.inboxHashAccumulator);
+        globalInbox = globalInbox with {
+            arbBlockNum: globalInbox.arbBlockNum + 1
+        };
+    } elseif (msg.kind == const::L1MessageType_L2 || msg.kind == const::L1MessageType_L2ForGasEstimation) {
+        // record the calldata usage, so it can be reported in tx receipt
+        msg = msg with {
+            aggregator: Some(struct {
+                aggregator: xif let Some(aggInfo) = msg.aggregator { aggInfo.aggregator } else { None<address> },
+                calldataUnits: bytearray_getCalldataUnits(msg.msgData),
+            })
+        };
+
+        // it's an L2 message, so switch based on the L2 type
+        let firstByte = bytearray_getByte(msg.msgData, 0);
+        if (firstByte == const::L2MessageType_heartbeat) {
+            // it's a heartbeat message, don't do anything
+        } elseif (firstByte == const::L2MessageType_signedCompressedTx) {
+            // it's a single message with compressed headers
+            if let Some(txRequest) = decompressAndVerifyEcdsaSignedTx(msg.msgData, msg) {
+                handleArrivingTx(txRequest);
+            }
+            // else signature was invalid, ignore msg
+        } else {
+            // subtype must be unsigned EOA, unsigned contract, or nonmutating
+            if let Some(txRequest) = translateUnsignedTx(msg) {
+                handleArrivingTx(txRequest);
+            }
+            // else request was malformatted, ignore it
+        }
+    } elseif (msg.kind == const::L1MessageType_rollupProtocolEvent) {
+        // ignore this message type
+    } elseif (msg.kind == const::L1MessageType_submitRetryableTx) {
+        if let Some(txRequest) = processRetryableTx(msg) {
+            handleArrivingTx(txRequest);
+        }
+        // submission failed, or no immediate tx included; either way, ignore the messge
+    } else {
+        // invalid message type -- ignore it
+    }
+}
+
+impure func handleArrivingTx(tx: TxRequestData) {
+    let (resultCode, request) = xif (allowedSenders_contains(tx.caller) || tx.incomingRequest.adminMode) {
+        gasAccounting_prepareTx(tx)
+    } else {
+        (const::TxResultCode_senderNotPermitted, tx)
     };
+
+    if (resultCode == const::TxResultCode_success) {
+        if (processL2Request(request) == None<()>) {
+            // reject for message format error
+            emitTxReceipt(
+                request.incomingRequest,
+                const::TxResultCode_formatError,
+                None<ByteArray>,
+                None<EvmLogs>,
+                None<GasUsage>,
+                request.feeStats,
+                false,      // don't emit tracing info because the tx was bogus
+            );
+        }
+    } else {
+        // before emitting a failure receipt, try to increment caller's sequence number
+        if ((resultCode != const::TxResultCode_sequenceNumberTooLow) && (resultCode != const::TxResultCode_sequenceNumberTooHigh)) {
+            if let Some(seqNum) = request.seqNum {
+                let gAcctStore = getGlobalAccountStore();
+                if let Some(acct) = account_checkAndIncrSeqNum(accountStore_get(gAcctStore, request.caller), seqNum) {
+                    setGlobalAccountStore(accountStore_set(gAcctStore, request.caller, acct));
+                }
+            }
+        }
+
+        emitTxReceipt(
+            request.incomingRequest,
+            resultCode,
+            None<ByteArray>,
+            None<EvmLogs>,
+            None<GasUsage>,
+            request.feeStats,
+            true,
+        );
+    }
 }
 
 impure func translateUnsignedTx(request: IncomingRequest) -> option<TxRequestData> {

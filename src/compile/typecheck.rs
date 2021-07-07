@@ -61,9 +61,7 @@ impl<'a> AbstractSyntaxTree for TypeCheckedNode<'a> {
         match self {
             TypeCheckedNode::Statement(stat) => stat.child_nodes(),
             TypeCheckedNode::Expression(exp) => exp.child_nodes(),
-            TypeCheckedNode::StructField(field) => {
-                vec![TypeCheckedNode::Expression(&mut field.value)]
-            }
+            TypeCheckedNode::StructField(field) => field.child_nodes(),
             TypeCheckedNode::Type(tipe) => tipe.child_nodes(),
         }
     }
@@ -601,6 +599,14 @@ fn flowcheck_liveliness(
                 TypeCheckedExprKind::Loop(_body) => true,
                 _ => false,
             },
+            TypeCheckedNode::StructField(field) => {
+                process!(
+                    vec![TypeCheckedNode::Expression(&mut field.value)],
+                    problems,
+                    false
+                );
+                continue;
+            }
             _ => false,
         };
 
@@ -2132,7 +2138,7 @@ fn typecheck_expr(
                                             "wrong argument type in function call, {}",
                                             resolved_arg_type
                                                 .mismatch_string(&tc_args[i].get_type(), type_tree)
-                                                .expect("Did not find a mismatch")
+                                                .unwrap_or("Compiler could not identify a specific mismatch".to_string())
                                         ),
                                         loc.into_iter().collect(),
                                     ));

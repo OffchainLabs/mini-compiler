@@ -2,14 +2,13 @@
 // Copyright 2020, Offchain Labs, Inc. All rights reserved.
 //
 
+
+use accounts::AccountStore;
 use accounts::accountStore_init;
 use accounts::getGlobalAccountStore;
 use accounts::setGlobalAccountStore;
-use accounts::accountStore_get;
-use accounts::accountStore_set;
 use accounts::accountStore_createAccountFromEvmCode;
 use accounts::accountStore_upgradeContractFromEvmCode;
-use accounts::account_checkAndIncrSeqNum;
 
 use arbstatistics::arbStatistics_init;
 use arbowner::arbowner_init;
@@ -34,26 +33,19 @@ use evmCallStack::evmCallStack_init;
 use evmOps::evmOps_init;
 use evmOps::dispatchForEvmOp;
 
-use evmlogs::EvmLogs;
-
-use gasAccounting::GasUsage;
 use gasAccounting::gasAccounting_init;
-use gasAccounting::getNextRequestFromCongestionAuction;
 
 use inbox::inbox_init;
+use inbox::mainRunLoop;
 use inbox::emitGenesisBlockReceipt;
-
-use messages::handleL2Request;
 
 use output::output_init;
 use output::txReceipts_init;
-use output::emitTxReceipt;
 
 use pluggables::pluggables_init;
 
 use precompiles::precompiles_init;
 
-use std::bytearray::ByteArray;
 use std::bytearray::bytearray_unmarshalBytes;
 use std::bytestream::bytestream_new;
 
@@ -112,46 +104,6 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
     // initialize any customizations here
 
     mainRunLoop();
-}
-
-public impure func mainRunLoop() {
-    loop {
-        let (resultCode, request) = getNextRequestFromCongestionAuction();
-        if (resultCode == const::TxResultCode_success) {
-            if (handleL2Request(request) == None<()>) {
-                // reject for message format error
-                emitTxReceipt(
-                    request.incomingRequest,
-                    const::TxResultCode_formatError,
-                    None<ByteArray>,
-                    None<EvmLogs>,
-                    None<GasUsage>,
-                    request.feeStats,
-                    false,      // don't emit tracing info because the tx was bogus
-                );
-            }
-        } else {
-            // before emitting a failure receipt, try to increment caller's sequence number
-            if ( (resultCode != const::TxResultCode_sequenceNumberTooLow) && (resultCode != const::TxResultCode_sequenceNumberTooHigh) ) {
-                if let Some(seqNum) = request.seqNum {
-                    let gAcctStore = getGlobalAccountStore();
-                    if let Some(acct) = account_checkAndIncrSeqNum(accountStore_get(gAcctStore, request.caller), seqNum) {
-                        setGlobalAccountStore(accountStore_set(gAcctStore, request.caller, acct));
-                    }
-                }
-            }
-
-            emitTxReceipt(
-                request.incomingRequest,
-                resultCode,
-                None<ByteArray>,
-                None<EvmLogs>,
-                None<GasUsage>,
-                request.feeStats,
-                true,
-            );
-        }
-    }
 }
 
 impure func initializePreinstalls(isUpgrade: bool) -> option<()> {

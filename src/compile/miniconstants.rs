@@ -159,8 +159,8 @@ fn event_topics_for_builtin_contract(
 
 pub fn make_parameters_list(
     constants_path: Option<&Path>,
-) -> Result<HashMap<String, String>, CompileError> {
-    let mut ret = HashMap::new();
+) -> Result<BTreeMap<String, String>, CompileError> {
+    let mut ret = BTreeMap::new();
 
     let consts = if let Some(consts_file) = constants_path {
         let mut file = File::open(consts_file).map_err(|_| {

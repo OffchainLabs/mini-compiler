@@ -6,6 +6,11 @@
 // Some operations can only be done on values that have the same denominator.
 // We assume that num and denom will always be less than 2**128. If this is true, arithmetic will never overflow.
 
+use std::safeMath::safeAdd;
+use std::safeMath::safeSub;
+use std::safeMath::safeMul;
+
+
 type FixedPoint = struct {
     val: uint,
     shiftFactor: uint,
@@ -27,7 +32,7 @@ public func fixedPoint_isZero(x: FixedPoint) -> bool {
 }
 
 public func fixedPoint_fromUintMatch(x: uint, fp: FixedPoint) -> FixedPoint {
-    return fp with { val: x * fp.shiftFactor };
+    return fp with { val: safeMul(x, fp.shiftFactor) };
 }
 
 public func fixedPoint_getNum(x: FixedPoint) -> uint {
@@ -39,12 +44,12 @@ public func fixedPoint_getDenom(x: FixedPoint) -> uint {
 }
 
 public func fixedPoint_equal(x: FixedPoint, y: FixedPoint) -> bool {
-    return (x.val * y.shiftFactor) == (y.val * x.shiftFactor);
+    return safeMul(x.val, y.shiftFactor) == safeMul(y.val, x.shiftFactor);
 }
 
 public func fixedPoint_compare(x: FixedPoint, y: FixedPoint) -> int {
-    let xProd = x.val * y.shiftFactor;
-    let yProd = y.val * x.shiftFactor;
+    let xProd = safeMul(x.val, y.shiftFactor);
+    let yProd = safeMul(y.val, x.shiftFactor);
     return xif (xProd > yProd) {    int(1)    }
     elseif(xProd == yProd) {    int(0)    }
     else {    -int(1)    };
@@ -52,19 +57,19 @@ public func fixedPoint_compare(x: FixedPoint, y: FixedPoint) -> int {
 
 public func fixedPoint_add(x: FixedPoint, y: FixedPoint) -> option<FixedPoint> {
     return xif (x.shiftFactor == y.shiftFactor) {
-        Some(x with { val: x.val + y.val })
+        Some(x with { val: safeAdd(x.val, y.val) })
     } else {
         None<FixedPoint>
     };
 }
 
 public func fixedPoint_plusOne(x: FixedPoint) -> FixedPoint {
-    return x with { val: x.val + x.shiftFactor };
+    return x with { val: safeAdd(x.val, x.shiftFactor) };
 }
 
 public func fixedPoint_sub(x: FixedPoint, y: FixedPoint) -> option<FixedPoint> {
     return xif (x.shiftFactor == y.shiftFactor) {
-        Some(x with { val: x.val - y.val })
+        Some(x with { val: safeSub(x.val, y.val) })
     } else {
         None<FixedPoint>
     };
@@ -72,29 +77,29 @@ public func fixedPoint_sub(x: FixedPoint, y: FixedPoint) -> option<FixedPoint> {
 
 public func fixedPoint_mul(x: FixedPoint, y: FixedPoint) -> option<FixedPoint> {
     return xif (x.shiftFactor == y.shiftFactor) {
-        Some(x with { val: (x.val * y.val) / x.shiftFactor })
+        Some(x with { val: safeMul(x.val, y.val) / x.shiftFactor })
     } else {
         None<FixedPoint>
     };
 }
 
 public func fixedPoint_mulByUint(x: FixedPoint, i: uint) -> FixedPoint {
-    return x with { val: x.val * i };
+    return x with { val: safeMul(x.val, i) };
 }
 
 public func fixedPoint_mulByUintTrunc(x: FixedPoint, i: uint) -> uint {
-    return (x.val * i) / x.shiftFactor;
+    return safeMul(x.val, i) / x.shiftFactor;
 }
 
 public func fixedPoint_div(x: FixedPoint, y: FixedPoint) -> option<FixedPoint> {
     return xif ((x.shiftFactor == y.shiftFactor) && (x.shiftFactor != 0)) {
         Some(fixedPoint_new(x.val, y.val))
     } else {
-        let denom = x.shiftFactor * y.val;
+        let denom = safeMul(x.shiftFactor, y.val);
         xif (denom == 0) {
             None<FixedPoint>
         } else {
-            Some(fixedPoint_new(x.val * y.shiftFactor, denom))
+            Some(fixedPoint_new(safeMul(x.val, y.shiftFactor), denom))
         }
     };
 }
