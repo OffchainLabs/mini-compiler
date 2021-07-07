@@ -11,13 +11,11 @@ use core::kvs::builtin_kvsForall;
 use accounts::getGlobalAccountStore;
 use accounts::setGlobalAccountStore;
 use accounts::accountStore_get;
-use accounts::accountStore_feeCollectorForAggregator;
 use accounts::accountStore_addToEscrowUpToMax;
 use accounts::accountStore_payFullyFromEscrow;
 use accounts::accountStore_payFromEscrow;
 use accounts::accountStore_transferEthBalance;
 use accounts::account_getEthBalance;
-use accounts::accountStore_transferEthBalance;
 use accounts::account_getNextSeqNum;
 use accounts::account_getAggregatorToPay;
 use accounts::account_setBaseTxFeeL1Gas;
@@ -35,7 +33,6 @@ use messages::TxRequestData;
 use std::fixedpoint::FixedPoint;
 use std::fixedpoint::fixedPoint_new;
 use std::fixedpoint::fixedPoint_mulByUintTrunc;
-use std::fixedpoint::fixedPoint_div;
 use std::fixedpoint::fixedPoint_plusOne;
 
 use std::addressSet::SetOfAddresses;
@@ -618,18 +615,6 @@ public impure func gasAccounting_endTxCharges(
     ));
 }
 
-public impure func gasAccounting_getGasChargeAmountInArbGas(numStorageUnits: uint) -> uint {
-    let storagePriceWei = gasAccountingInfo.currentPrices.perStorageCell;
-    let computePriceWei = gasAccountingInfo.currentPrices.perArbGasTotal;
-    return xif (storagePriceWei == 0) {
-        0
-    } elseif (computePriceWei == 0) {
-        ~0
-    } else {
-        numStorageUnits * storagePriceWei / computePriceWei
-    };
-}
-
 public impure func gasAccounting_pauseTxCharges() -> uint {
     // pause charging the currently running tx
     // return how many units of the tx's initial maxGas are still unused
@@ -1073,10 +1058,6 @@ impure func updateCongestionState(state: CongestionState, toBlockNum: uint, toTi
         lastTimestampSeen: toTimestamp,
         congestionPriceWei: totalPrice - basePrice,
     };
-}
-
-public impure func getGasLimitPerTx() -> uint {
-    return gasAccountingParams.TxGasLimit;
 }
 
 public impure func getRetryableTxPrice(calldataSize: uint) -> (uint, uint) {

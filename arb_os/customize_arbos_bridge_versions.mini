@@ -8,38 +8,14 @@ use bridge_arbos_versions::before__accounts_Account;
 use accounts::Account;
 use accounts::AccountStore;
 use accounts::AggregatorInfo;
-use accounts::accountStore_forall;
-
-use gasAccounting::TxGasState;
-use gasAccounting::FeeConfig;
 
 use evmCallStack::EvmCallFrame;
-
-
-use chainParameters::ChainParams;
 
 use gasAccounting::GasAccountingInfo;
 
-use tracing::EvmTracer;
-use tracing::evmTracer_new;
-
-use std::avmcodebuilder::AvmCodePoint;
-
 use std::fixedpoint::fixedPoint_new;
 
-use std::merkletree::MerkleTreeBuilder;
-
-use gasAccounting::TxGasState;
-use gasAccounting::FeeConfig;
-use gasAccounting::GasPrices;
-use gasAccounting::CongestionState;
-use gasAccounting::PricingParameters;
-use gasAccounting::RetryablePrices;
-
-use std::addressSet::SetOfAddresses;
 use std::addressSet::setOfAddresses_all;
-use evmCallStack::EvmCallFrame;
-use messages::TxRequestData;
 
 use core::kvs::Kvs;
 use core::kvs::builtin_kvsForall;
@@ -126,32 +102,3 @@ public func set_gasAccountingInfo_onUpgrade(input_globals: GlobalsBeforeUpgrade)
         allowedSenders: setOfAddresses_all(),
     };
 }
-
-public func set_codeSegGlobals_onUpgrade(
-    _input_globals: GlobalsBeforeUpgrade
-) -> struct {
-    unreachableMask: uint,
-    dummyAcceptContractCode: impure func(),
-} {
-    return struct {
-        unreachableMask: 0,
-        dummyAcceptContractCode: unsafecast<impure func()>(0),     // will initialize this properly later
-    };
-}
-
-public func set_globalOutbox_onUpgrade(
-    input_globals: GlobalsBeforeUpgrade
-) -> struct {
-    batch: MerkleTreeBuilder,
-    batchNumber: uint,
-    numInBatch: uint,
-    evmTracer: EvmTracer,
-} {
-    return struct {
-        batch: input_globals.globalOutbox.batch,
-        batchNumber: input_globals.globalOutbox.batchNumber,
-        numInBatch: input_globals.globalOutbox.numInBatch,
-        evmTracer: evmTracer_new(),
-    };
-}
-

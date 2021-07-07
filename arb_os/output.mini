@@ -73,10 +73,6 @@ func outputStats_new() -> OutputStatistics {
     };
 }
 
-func outputStats_isAllZero(os: OutputStatistics) -> bool {
-    return (os.totalGasUsed + os.numTx + os.numEvmLogs + os.numLogs + os.numSends) == 0;
-}
-
 func outputStats_add(os1: OutputStatistics, os2: OutputStatistics) -> OutputStatistics {
     return struct {
         totalGasUsed: os1.totalGasUsed + os2.totalGasUsed,
@@ -403,7 +399,7 @@ impure func updateEvmLogForSendToL1(rawLog: any, state: any) -> (any, any) {
     // Cast the log item to a struct that assumes 4 topics. The topics might not exist,
     //      but that's OK because we won't try to access them until after we have verified that they exist.
     let log = unsafecast<LogWith4Topics>(rawLog);
-    return xif ((asm(log,) uint { tlen } == 6) && (log.topic0 == const::EVMLogTopicForL2ToL1Send)) {
+    return xif ((asm(log,) uint { tlen } == 6) && (log.topic0 == const::eventTopic_ArbSys_L2ToL1Transaction)) {
         // Now we know that the log has 4 topics.
         xif let Some(res) = queue_get(unsafecast<Queue>(state)) {
             let (uq, item) = res;

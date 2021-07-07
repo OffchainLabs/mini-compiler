@@ -50,8 +50,6 @@ use inbox::inbox_currentArbBlockNumber;
 use inbox::inbox_currentEthBlockNumber;
 use inbox::inbox_currentTimestamp;
 
-use std::stack::stack_pop;
-
 use output::queueMessageForSend;
 
 use decompression::getGlobalAddressTable;
@@ -72,8 +70,6 @@ use std::bls::bls_marshalPublicKey;
 
 use decompression::parseAggregatorFunctionTable;
 
-use codeSegment::pcTableForCode;
-
 
 public impure func arbsys_txcall() {
     if let Some(topFrame) = evmCallStack_topFrame() {
@@ -82,23 +78,21 @@ public impure func arbsys_txcall() {
             evmOp_revert_knownCodePc(address(const::Address_ArbSys), 0, 0, 0);
         }
         let funcCode = getFuncCode(calldata);
-        if (funcCode == 0x051038F2) {
+        if (funcCode == const::funcCode_ArbSys_arbOSVersion) {
             arbsys_arbOSVersion(topFrame, calldata);
         } elseif(funcCode == const::funcCode_ArbSys_arbChainID) {
             arbsys_arbChainID(topFrame, calldata);
-        } elseif(funcCode == 0xa3b1b31d) {
+        } elseif(funcCode == const::funcCode_ArbSys_arbBlockNumber) {
             arbsys_arbBlockNumber(topFrame, calldata);
-        } elseif(funcCode == 0x25e16063) {
+        } elseif(funcCode == const::funcCode_ArbSys_withdrawEth) {
             arbsys_withdrawEth(topFrame, calldata);
-        } elseif(funcCode == 0x928c169a) {
+        } elseif(funcCode == const::funcCode_ArbSys_sendTxToL1) {
             arbsys_sendTxToL1(topFrame, calldata);
-        } elseif(funcCode == 0x23ca0cd2) {
+        } elseif(funcCode == const::funcCode_ArbSys_getTransactionCount) {
             arbsys_getTransactionCount(topFrame, calldata);
-        } elseif(funcCode == 0xa169625f) {
+        } elseif(funcCode == const::funcCode_ArbSys_getStorageAt) {
             arbsys_getStorageAt(topFrame, calldata);
-        } elseif(funcCode == 0x3dcfdac7) {
-            arbsys_getPcTable(topFrame, calldata);
-        } elseif (funcCode == 0x08bd624c) {
+        } elseif (funcCode == const::funcCode_ArbSys_isTopLevelCall) {
             arbsys_isTopLevelCall(topFrame, calldata);
         } else {
             // unrecognized function code
@@ -376,7 +370,7 @@ impure func sendTxToL1(caller: address, destination: address, callvalue: uint, c
     evmOp_log4(
         0,
         bytearray_size(mem),
-        const::EVMLogTopicForL2ToL1Send,
+        const::eventTopic_ArbSys_L2ToL1Transaction,
         uint(destination),
         uniqueId,
         0,    // batch number will be filled in later
@@ -430,33 +424,6 @@ impure func arbsys_getStorageAt(topFrame: EvmCallFrame, calldata: ByteArray) {
         evmOp_return(0, 32);
     } else {
         evmOp_revert_knownCodePc(address(const::Address_ArbSys), 51, 0, 0);
-    }
-}
-
-impure func arbsys_getPcTable(_topFrame: EvmCallFrame, calldata: ByteArray) {
-    if (bytearray_size(calldata) <= 4) {
-        evmOp_revert_knownCodePc(address(const::Address_ArbSys), 60, 0, 0);
-    }
-    let pcTable = pcTableForCode(bytearray_extract(calldata, 4, bytearray_size(calldata)-4));
-    let mem = evmCallStack_getTopFrameMemoryOrDie();
-    mem = bytearray_set256(mem, 0, 64);
-    let offset = 64;
-    loop {
-        if let Some(res) = stack_pop(pcTable) {
-            let (upct, item) = res;
-            pcTable = upct;
-            let (evmPc, avmCpHash) = unsafecast<(uint, bytes32)>(item);
-            mem = bytearray_set256(
-                bytearray_set256(mem, offset, evmPc),
-                offset+32,
-                uint(avmCpHash),
-            );
-            offset = offset + 64;
-        } else {
-            // done reading data, finish building returndata then return
-            mem = bytearray_set256(mem, 32, (offset-64)/32);
-            evmOp_return(0, offset);
-        }
     }
 }
 

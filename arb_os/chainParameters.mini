@@ -31,16 +31,8 @@ type ChainParams = struct {
 
 var globalChainParams: option<ChainParams>;
 
-public impure func chainParams_haveDoneInit() -> bool {
-    return (unsafecast<any>(globalChainParams) != ()) && (globalChainParams != None<ChainParams>);
-}
-
 public impure func chainParams_init() {
     globalChainParams = None<ChainParams>;
-}
-
-public impure func haveReceivedChainInitMessage() -> bool {
-    return globalChainParams != None<ChainParams>;
 }
 
 public impure func chainParams_gotParamsMessage(_sender: address, data: ByteArray) {
@@ -155,14 +147,6 @@ public impure func chainParams_speedLimitPerSecond() -> uint {
         params.arbGasSpeedLimitPerSecond
     } else {
         const::DefaultSpeedLimitPerSecond
-    };
-}
-
-public impure func chainParams_baseStake() -> (address, uint) {
-    return xif let Some(params) = globalChainParams {
-        (params.stakingToken, params.baseStake)
-    } else {
-        (address(0), 0)
     };
 }
 

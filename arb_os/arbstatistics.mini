@@ -43,7 +43,7 @@ public impure func arbStatistics_txcall() {
     }
 }
 
-impure func arbStatistics_getStats(topFrame: EvmCallFrame, calldata: ByteArray) {  // (txId)
+impure func arbStatistics_getStats(_topFrame: EvmCallFrame, calldata: ByteArray) {  // (txId)
     if (bytearray_size(calldata) != 4) {
         evmOp_revert_knownPc(10, 0, 0);
     }
@@ -73,14 +73,6 @@ var arbStats: ArbStatistics;
 
 public impure func arbStatistics_init() {
     arbStats = struct {
-        storage: 0,
-        arbGasUsed: 0,
-        numTxReceipts: 0,
-    };
-}
-
-public func arbStatistics_newForUpgrade() -> ArbStatistics {
-    return struct {
         storage: 0,
         arbGasUsed: 0,
         numTxReceipts: 0,

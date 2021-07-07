@@ -280,7 +280,7 @@ public impure func precompile_0x04() {  // identity function
     evmOp_revert_knownPc(0, 0, 0);
 }
 
-public impure func precompile_0x05() {  // modexp
+public impure func _precompile_0x05() {  // modexp
     if let Some(topFrame) = evmCallStack_topFrame() {
         let calldata = evmCallFrame_getCalldata(topFrame);
 

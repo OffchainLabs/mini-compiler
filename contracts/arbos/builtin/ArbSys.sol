@@ -56,8 +56,6 @@ interface ArbSys {
     */
     function isTopLevelCall() external view returns (bool);
 
-    event EthWithdrawal(address indexed destAddr, uint amount);
-
     event L2ToL1Transaction(address caller, address indexed destination, uint indexed uniqueId,
                             uint indexed batchNumber, uint indexInBatch,
                             uint arbBlockNum, uint ethBlockNum, uint timestamp,

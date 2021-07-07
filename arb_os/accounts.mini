@@ -173,31 +173,6 @@ public func accountStore_destroyAccount(acctStore: AccountStore, addrToDestroy: 
     return accountStore_set(acctStore, addrToDestroy, pristineAccount(addrToDestroy));
 }
 
-public func accountStore_destroyAndTransferBalance(
-    acctStore: AccountStore,
-    victimAddr: address,
-    recipientAddr: address
-) -> AccountStore {
-    // Destroy the account at victimAddr, and give its Eth balance to recipientAddr.
-    // If recipientAddr == victimAddr, this burns the funds.
-
-    let victim = accountStore_get(acctStore, recipientAddr);
-    let recipient = accountStore_get(acctStore, recipientAddr);
-    return xif (victimAddr == recipientAddr) {
-        accountStore_set(
-            acctStore,
-            victimAddr,
-            account_addBalance(pristineAccount(victimAddr), victim.ethBalance),
-        )
-    } else {
-        accountStore_set(
-            accountStore_set(acctStore, recipientAddr, account_addBalance(recipient, victim.ethBalance)),
-            victimAddr,
-            pristineAccount(victimAddr),
-        )
-    };
-}
-
 public func account_isEmpty(acct: Account) -> bool {
     return (acct.nextSeqNum == 0) && (acct.ethBalance == 0) && (acct.contractInfo == None<AccountContractInfo>);
 }
@@ -258,14 +233,6 @@ public func account_getBalance(account: Account) -> uint {
     return account.ethBalance;
 }
 
-public func account_setBalance(account: Account, balance: uint) -> Account {
-    return account with { ethBalance: balance };
-}
-
-public func account_addBalance(account: Account, balance: uint) -> Account {
-    return account with { ethBalance: account.ethBalance + balance };
-}
-
 public func account_getEvmJumpTable(account: Account) -> option<map<uint, impure func()>> {
     return Some((account.contractInfo?).evmJumpTable);
 }
@@ -286,10 +253,6 @@ public func account_incrSeqNum(account: Account) -> Account {
 
 public func account_getNextSeqNum(account: Account) -> uint {
     return account.nextSeqNum;
-}
-
-public func account_setNextSeqNum(account: Account, num: uint) -> Account {
-    return account with { nextSeqNum: num };
 }
 
 public func account_getAggregatorDecompressionState(account: Account) -> option<AggregatorDecompressionState> {
@@ -317,7 +280,7 @@ public func account_setAggregatorDecompressionState(
     };
 }
 
-public func accountStore_feeCollectorForAggregator(acctStore: AccountStore, agg: address) -> address {
+public func _accountStore_feeCollectorForAggregator(acctStore: AccountStore, agg: address) -> address {
     return account_getFeeCollector(accountStore_get(acctStore, agg));
 }
 
@@ -487,27 +450,6 @@ public func accountStore_createBuiltinContract(
     };
 }
 
-public func accountStore_cloneContract(
-    acctStore: AccountStore,
-    oldAddr: address, 
-    newAddr: address,
-    copyStorage: bool,
-) -> option<AccountStore> {
-    // Clone an existing contract.
-    // Return Some(updatedAccountStore), or None if something went wrong.
-    let oldAccount = accountStore_get(acctStore, oldAddr);
-    let oldContractInfo = oldAccount.contractInfo?;
-    let newAccount = oldAccount
-        with { ethBalance: 0 }
-        with { nextSeqNum: 1 };
-    if (!copyStorage) {
-        newAccount = newAccount with {
-            contractInfo: Some(oldContractInfo with { storage: storageMap_new() })
-        };
-    }
-    return Some(accountStore_set(acctStore, newAddr, newAccount));
-}
-
 public func account_getEthBalance(account: Account) -> uint {
     return account.ethBalance;
 }
@@ -582,11 +524,11 @@ public func accountStore_newEscrow(acctStore: AccountStore, payer: address, amou
     };
 }
 
-public func accountStore_getEscrowBalance(acctStore: AccountStore, key: uint) -> uint {
+public func _accountStore_getEscrowBalance(acctStore: AccountStore, key: uint) -> uint {
     return storageMap_get(acctStore.escrowStore.escrowedValues, key);
 }
 
-public func accountStore_addToEscrow(acctStore: AccountStore, key: uint, payer: address, amount: uint) -> option<AccountStore> {
+public func _accountStore_addToEscrow(acctStore: AccountStore, key: uint, payer: address, amount: uint) -> option<AccountStore> {
     let acct = accountStore_get(acctStore, payer);
     return xif (acct.ethBalance < amount) {
         None<AccountStore>
@@ -739,10 +681,6 @@ func asfaClosure(_: any, acct: Account, wrappedState: asfa_wrappedState) -> asfa
     return wrappedState with {
         innerState: wrappedState.innerClosure(acct, wrappedState.innerState)
     };
-}
-
-public func accountStore_codeRefExists(acctStore: AccountStore, codeHash: bytes32) -> bool {
-    return acctStore.codeRefTable[codeHash] != None<CodeRef>;
 }
 
 public impure func accountStore_createOrAddCodeRef(

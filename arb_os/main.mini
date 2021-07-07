@@ -9,24 +9,13 @@ use accounts::accountStore_get;
 use accounts::accountStore_set;
 use accounts::accountStore_createAccountFromEvmCode;
 use accounts::accountStore_upgradeContractFromEvmCode;
-use accounts::accountStore_transferEthBalance;
 use accounts::account_checkAndIncrSeqNum;
-use accounts::account_setStorageCell;
-use accounts::account_setNextSeqNum;
-use accounts::pristineAccount;
-use accounts::account_getBalance;
-use accounts::account_setBalance;
-use accounts::account_addBalance;
 
 use arbstatistics::arbStatistics_init;
-
-use arbsys::arbosVersion;
 
 use blockhash::blockhash_init;
 
 use chainParameters::chainParams_init;
-use chainParameters::chainParams_haveDoneInit;
-use chainParameters::chainParams_chainId;
 
 use codeSegment::codeSegment_init;
 use codeSegment::translateEvmCodeSegment;
@@ -63,8 +52,6 @@ use pluggables::pluggables_init;
 
 use precompiles::precompiles_init;
 
-use rollupTracker::rollupTracker_init;
-
 use std::bytearray::ByteArray;
 use std::bytearray::bytearray_unmarshalBytes;
 use std::bytestream::bytestream_new;
@@ -93,51 +80,6 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
         if (initializePreinstalls(true) == None<()>) {
             panic;   // don't try to run without preinstalls and precompiles
         }
-
-        // special-case fix for the WETH9 TransparentUpgradableProxy contract, on mainnet only
-        if ((arbosVersion() == 33) && (chainParams_chainId() == 42161)) {
-            let acctStore = getGlobalAccountStore();
-
-            // transfer funds out of source account
-            let xferFromAddr = address(0x82aF49447D8a07e3bd95BD0d56f35241523fBab1);
-            let xferFromAcct = accountStore_get(acctStore, xferFromAddr);
-            let balanceToXfer = account_getBalance(xferFromAcct);
-            acctStore = accountStore_set(
-                acctStore,
-                xferFromAddr,
-                account_setBalance(xferFromAcct, 0),
-            );
-
-            // destroy two old contracts, reset the accounts to pristine state
-            let contractAddr1 = address(0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8);
-            let contractAddr2 = address(0x82aF49447D8a07e3bd95BD0d56f35241523fBab1);
-            acctStore = accountStore_set(acctStore, contractAddr1, pristineAccount(contractAddr1));
-            acctStore = accountStore_set(acctStore, contractAddr2, pristineAccount(contractAddr2));
-
-            // transfer the funds into the destination account
-            let xferToAddr = address(0xBB1a241DCBd6A3894cB61F659034874Dc9CF65D4);
-            let xferToAcct = accountStore_get(acctStore, xferToAddr);
-            acctStore = accountStore_set(
-                acctStore,
-                xferToAddr,
-                account_addBalance(xferToAcct, balanceToXfer),
-            );
-
-            // do another ETH rescue
-            acctStore = xif let Some(uas) = accountStore_transferEthBalance(
-                acctStore,
-                address(0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f),
-                address(0x1FcCBE3369eada96887A3b2857B57bBA65E83Dc1),
-                account_getBalance(accountStore_get(acctStore, address(0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f))),
-            ) {
-                uas
-            } else {
-                // this shouldn't be possible, but be safe anyway
-                acctStore
-            };
-
-            setGlobalAccountStore(acctStore);
-        }
     } else {
         // this is a clean start, not an upgrade
         errorHandler_init();
@@ -157,7 +99,6 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
         inbox_init();
         accountStore_init();
         txReceipts_init();
-        rollupTracker_init();
         if (initializePreinstalls(false) == None<()>) {
             panic;   // don't try to run without preinstalls and precompiles
         }

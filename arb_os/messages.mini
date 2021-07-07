@@ -10,7 +10,6 @@ use accounts::getGlobalAccountStore;
 use accounts::setGlobalAccountStore;
 use accounts::accountStore_get;
 use accounts::accountStore_set;
-use accounts::account_checkAndIncrSeqNum;
 use accounts::account_fetchAndIncrSeqNum;
 use accounts::account_hasContract;
 use accounts::account_getNextSeqNum;
@@ -31,24 +30,6 @@ use std::rlp::keccakOfRlpEncodedUintPair;
 
 use inbox::IncomingRequest;
 
-
-impure func verifyAndIncrSequenceNum(addr: address, seqNum: uint) -> option<()> {
-    // Verify the sequence number on a message.
-    // If it matches, increment the next expected seq num, and return Some(()).
-    // Else, change nothing and return None.
-    let globalAS = getGlobalAccountStore();
-    setGlobalAccountStore(
-        accountStore_set(
-            globalAS,
-            addr,
-            account_checkAndIncrSeqNum(
-                accountStore_get(globalAS, addr),
-                seqNum
-            )?
-        )
-    );
-    return Some(());
-}
 
 impure func fetchAndIncrSequenceNum(addr: address) -> uint {
     // Fetch sequence number, and increment it

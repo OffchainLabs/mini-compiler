@@ -241,7 +241,7 @@ impure func arbRetryable_getSubmissionPrice(_topFrame: EvmCallFrame, calldata: B
     }
 }
 
-impure func arbRetryable_emitTicketCreated(_topFrame: EvmCallFrame, txId: uint) {
+impure func _arbRetryable_emitTicketCreated(_topFrame: EvmCallFrame, txId: uint) {
     evmOp_log2(0, 0, const::eventTopic_ArbRetryableTx_TicketCreated, txId);
 }
 

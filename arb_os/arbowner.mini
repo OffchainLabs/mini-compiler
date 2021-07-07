@@ -137,6 +137,8 @@ public impure func arbowner_txcall() {
             arbowner_getAllAllowedSenders(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_setL1GasPriceEstimate) {
             arbowner_setL1GasPriceEstimate(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbOwner_bindAddressToPluggable) {
+            arbowner_bindAddressToPluggable(topFrame, calldata);
         } else {
             // unrecognized function code
             evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 2, 0, 0);
