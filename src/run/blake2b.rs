@@ -315,7 +315,7 @@ fn _test_eth_blake_precompile_impl() {
         let tx_id = machine.runtime_env.insert_tx_message(
             my_addr.clone(),
             Uint256::from_u64(1000000000),
-            Uint256::zero(),
+            None,
             Uint256::from_u64(9), // blake2f precompile
             Uint256::from_u64(0),
             &xbytes,

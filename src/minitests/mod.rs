@@ -348,7 +348,7 @@ fn test_call_to_precompile5(
     let txid = machine.runtime_env.insert_tx_message(
         sender_addr.clone(),
         Uint256::from_u64(1_000_000_000),
-        Uint256::zero(),
+        None,
         Uint256::from_u64(5),
         Uint256::zero(),
         &calldata,

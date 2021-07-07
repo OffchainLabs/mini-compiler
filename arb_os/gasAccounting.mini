@@ -700,7 +700,7 @@ public impure func gasAccounting_prepareTx(tx: TxRequestData) -> (
             0
         };
 
-        if ((tx.gasPrice != 0) && (tx.gasPrice < prices.perArbGasTotal) ) {
+        if (tx.gasPrice < prices.perArbGasTotal) {
             return (const::TxResultCode_gasPriceTooLow, tx);
         }
 
@@ -796,6 +796,8 @@ public impure func gasAccounting_prepareTx(tx: TxRequestData) -> (
                         }
                     }
                 }
+            } with {
+                gasPrice: 0   // ensure that we don't later reject the transaction for lack of gas funds
             },
         )
     };

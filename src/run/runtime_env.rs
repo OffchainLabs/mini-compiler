@@ -212,7 +212,7 @@ impl RuntimeEnvironment {
     }
 
     pub fn get_gas_price(&self) -> Uint256 {
-        Uint256::_from_gwei(200)
+        Uint256::_from_gwei(2)
     }
 
     pub fn insert_l2_message(
@@ -263,7 +263,7 @@ impl RuntimeEnvironment {
         &mut self,
         sender_addr: Uint256,
         max_gas: Uint256,
-        gas_price_bid: Uint256,
+        gas_price_bid: Option<Uint256>,
         to_addr: Uint256,
         value: Uint256,
         data: &[u8],
@@ -272,7 +272,7 @@ impl RuntimeEnvironment {
         let mut buf = vec![0u8];
         let seq_num = self.get_and_incr_seq_num(&sender_addr.clone());
         buf.extend(max_gas.to_bytes_be());
-        buf.extend(gas_price_bid.to_bytes_be());
+        buf.extend(gas_price_bid.unwrap_or(self.get_gas_price()).to_bytes_be());
         buf.extend(seq_num.to_bytes_be());
         buf.extend(to_addr.to_bytes_be());
         buf.extend(value.to_bytes_be());
@@ -289,7 +289,7 @@ impl RuntimeEnvironment {
         &mut self,
         sender_addr: Uint256,
         max_gas: Uint256,
-        gas_price_bid: Uint256,
+        gas_price_bid: Option<Uint256>,
         to_addr: Uint256,
         value: Uint256,
         data: &[u8],
@@ -297,7 +297,7 @@ impl RuntimeEnvironment {
     ) -> Uint256 {
         let mut buf = vec![1u8];
         buf.extend(max_gas.to_bytes_be());
-        buf.extend(gas_price_bid.to_bytes_be());
+        buf.extend(gas_price_bid.unwrap_or(self.get_gas_price()).to_bytes_be());
         buf.extend(to_addr.to_bytes_be());
         buf.extend(value.to_bytes_be());
         buf.extend_from_slice(data);
@@ -340,7 +340,7 @@ impl RuntimeEnvironment {
 
     pub fn make_compressed_and_signed_l2_message(
         &mut self,
-        gas_price: Uint256,
+        gas_price: Option<Uint256>,
         gas_limit: Uint256,
         to_addr: Uint256,
         value: Uint256,
@@ -350,6 +350,7 @@ impl RuntimeEnvironment {
         let sender = Uint256::from_bytes(wallet.address().as_bytes());
         let mut result = vec![7u8, 0xffu8];
         let seq_num = self.get_and_incr_seq_num(&sender);
+        let gas_price = gas_price.unwrap_or(self.get_gas_price());
         result.extend(seq_num.rlp_encode());
         result.extend(gas_price.rlp_encode());
         result.extend(gas_limit.rlp_encode());
@@ -377,7 +378,7 @@ impl RuntimeEnvironment {
     pub fn _make_compressed_tx_for_bls(
         &mut self,
         sender: &Uint256,
-        gas_price: Uint256,
+        gas_price: Option<Uint256>,
         gas_limit: Uint256,
         to_addr: Uint256,
         value: Uint256,
@@ -385,6 +386,7 @@ impl RuntimeEnvironment {
     ) -> (Vec<u8>, Vec<u8>) {
         // returns (compressed tx to send, hash to sign)
         let mut result = self.compressor.compress_address(sender.clone());
+        let gas_price = gas_price.unwrap_or(self.get_gas_price());
 
         let mut buf = vec![0xffu8];
         let seq_num = self.get_and_incr_seq_num(&sender);
@@ -437,7 +439,7 @@ impl RuntimeEnvironment {
         &mut self,
         batch: &mut Vec<u8>,
         max_gas: Uint256,
-        gas_price_bid: Uint256,
+        gas_price_bid: Option<Uint256>,
         to_addr: Uint256,
         value: Uint256,
         calldata: Vec<u8>,
@@ -487,7 +489,7 @@ impl RuntimeEnvironment {
         self.insert_tx_message_from_contract(
             sender_addr,
             Uint256::from_u64(100_000_000),
-            Uint256::zero(),
+            None,
             payee,
             amount,
             &[],
@@ -895,7 +897,13 @@ impl ArbosReceipt {
             6 => "message format error",
             7 => "cannot deploy at address",
             8 => "exceeded tx gas limit",
-            9 => "below minimum ArbGas for contract tx",
+            9 => "insufficient gas for base fee",
+            10 => "below minimum ArbGas for contract tx",
+            11 => "gas price too low",
+            12 => "no gas for auto-redeem",
+            13 => "sender not permitted",
+            14 => "sequence number too low",
+            15 => "sequence number too high",
             _ => "unknown error",
         }
         .to_string()

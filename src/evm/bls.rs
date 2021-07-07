@@ -498,7 +498,7 @@ pub fn _evm_test_bls_signed_batch(log_to: Option<&Path>, debug: bool) -> Result<
     let (alice_compressed_tx, alice_hash_to_sign) =
         machine.runtime_env._make_compressed_tx_for_bls(
             &alice_addr,
-            Uint256::zero(),
+            None,
             Uint256::from_u64(100000000),
             add_contract.address.clone(),
             Uint256::zero(),
@@ -512,7 +512,7 @@ pub fn _evm_test_bls_signed_batch(log_to: Option<&Path>, debug: bool) -> Result<
         );
     let (bob_compressed_tx, bob_hash_to_sign) = machine.runtime_env._make_compressed_tx_for_bls(
         &bob_addr,
-        Uint256::zero(),
+        None,
         Uint256::from_u64(100000000),
         add_contract.address.clone(),
         Uint256::zero(),
