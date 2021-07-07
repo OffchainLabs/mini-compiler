@@ -3,7 +3,6 @@
 //
 
 use accounts::Account;
-use accounts::getGlobalAccountStore;
 use accounts::account_getBalance;
 use accounts::accountStore_forall;
 
@@ -19,21 +18,16 @@ use evmCallStack::evmCallStack_callHitError;
 use evmCallStack::evmCallFrame_getCalldata;
 use evmCallStack::evmCallFrame_getCaller;
 use evmCallStack::evmCallFrame_getCallvalue;
-use evmCallStack::evmCallFrame_getAccount;
-use evmCallStack::evmCallStack_setAccount;
 use evmCallStack::evmCallStack_setTopFrameMemory;
 use evmCallStack::evmCallStack_stackDepth;
 use evmCallStack::evmCallStack_returnFromCall;
 use evmCallStack::evmCallStack_transferEthFromCurrent;
+use evmCallStack::evmCallStack_getAccountStoreInCurrentContext;
 
 use evmOps::evmOp_return;
 use evmOps::evmOp_revert_knownPc;
 use evmOps::evmOp_revert_knownCodePc;
 use evmOps::doCreationOpcode;
-
-use pluggables::ModuleFunction;
-use pluggables::installPluggable;
-use pluggables::bindContractAddressToPluggable;
 
 use gasAccounting::setFairGasPriceSender;
 use gasAccounting::isFairGasPriceSender;
@@ -86,17 +80,19 @@ public impure func arbowner_txcall() {
         if (bytearray_size(calldata) < 4) {
             evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 1, 0, 0);
         }
-        let funcCode = asm(224, bytearray_get256(calldata, 0)) uint { shr };
+        let funcCode = (bytearray_get256(calldata, 0) >> 224);
         if (funcCode == const::funcCode_ArbOwner_startCodeUpload) {
             arbowner_startCodeUpload(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbOwner_startCodeUploadWithCheck) {
+            arbowner_startCodeUploadWithCheck(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_continueCodeUpload) {
             arbowner_continueCodeUpload(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_getUploadedCodeHash) {
             arbowner_getUploadedCodeHash(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_finishCodeUploadAsArbosUpgrade) {
            arbowner_finishCodeUploadAsArbosUpgrade(topFrame, calldata);
-        } elseif (funcCode == const::funcCode_ArbOwner_finishCodeUploadAsPluggable) {
-           arbowner_finishCodeUploadAsPluggable(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbOwner_getLastUpgradeHash) {
+           arbowner_getLastUpgradeHash(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_addToReserveFunds) {
             arbowner_addToReserveFunds(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_getChainParameter) {
@@ -129,8 +125,6 @@ public impure func arbowner_txcall() {
             arbowner_isFairGasPriceSender(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbOwner_getAllFairGasPriceSenders) {
             arbowner_getAllFairGasPriceSenders(topFrame, calldata);
-        } elseif (funcCode == const::funcCode_ArbOwner_bindAddressToPluggable) {
-            arbowner_bindAddressToPluggable(topFrame, calldata);
         } else {
             // unrecognized function code
             evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 2, 0, 0);
@@ -156,10 +150,23 @@ impure func arbowner_addToReserveFunds(topFrame: EvmCallFrame, calldata: ByteArr
 
 impure func arbowner_startCodeUpload(_topFrame: EvmCallFrame, calldata: ByteArray) { // ()
     if (bytearray_size(calldata) != 4) {
-        evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 20, 0, 0);
+        evmOp_revert_knownPc(20, 0, 0);
     }
     upgradeInProgress = Some(avmCodeBuilder_new(false));
     evmOp_return(0, 0);
+}
+
+impure func arbowner_startCodeUploadWithCheck(_topFrame: EvmCallFrame, calldata: ByteArray) { // ()
+    if (bytearray_size(calldata) != 36) {
+        evmOp_revert_knownPc(20, 0, 0);
+    }
+    let oldCodeHash = bytes32(bytearray_get256(calldata, 4));
+    if ((oldCodeHash == bytes32(0)) || (oldCodeHash == previousArbosUpgradeHash)) {
+        upgradeInProgress = Some(avmCodeBuilder_new(false));
+        evmOp_return(0, 0);
+    } else {
+        evmOp_revert_knownPc(21, 0, 0);
+    }
 }
 
 impure func arbowner_continueCodeUpload(_topFrame: EvmCallFrame, calldata: ByteArray) { // (bytes)
@@ -225,40 +232,6 @@ impure func arbowner_finishCodeUploadAsArbosUpgrade(_topFrame: EvmCallFrame, cal
     }
 }
 
-impure func arbowner_finishCodeUploadAsPluggable(_topFrame: EvmCallFrame, calldata: ByteArray) { // ()
-    if (bytearray_size(calldata) != 68) {
-        evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 50, 0, 0);
-    }
-    let id = bytearray_get256(calldata, 4);
-    let keepState = bytearray_get256(calldata, 36) != 0;
-    if let Some(upgrade) = upgradeInProgress {
-        if let Some(_) = installPluggable(id, unsafecast<ModuleFunction>(avmCodeBuilder_finish(upgrade)), keepState) {
-            evmOp_return(0, 0);
-        } else {
-            evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 51, 0, 0);
-        }
-    } else {
-        evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 52, 0, 0);
-    }
-}
-
-impure func arbowner_bindAddressToPluggable(topFrame: EvmCallFrame, calldata: ByteArray) { // (address, uint)
-    if (bytearray_size(calldata) != 68) {
-        evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 60, 0, 0);
-    }
-    let addr = address(bytearray_get256(calldata, 4));
-    let pluggableId = bytearray_get256(calldata, 36);
-
-    let acct = evmCallFrame_getAccount(topFrame, addr);
-    acct = bindContractAddressToPluggable(acct, pluggableId);
-    let success = evmCallStack_setAccount(addr, acct);
-    if (success) {
-        evmOp_return(0, 0);
-    } else {
-        evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 61, 0, 0);
-    }
-}
-
 impure func arbowner_getChainParameter(_topFrame: EvmCallFrame, calldata: ByteArray) { // (uint) -> uint
     if (bytearray_size(calldata) != 36) {
         evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 70, 0, 0);
@@ -292,7 +265,7 @@ impure func arbowner_getTotalOfEthBalances(_topFrame: EvmCallFrame, calldata: By
         evmOp_revert_knownCodePc(address(const::Address_ArbOwner), 150, 0, 0);
     }
     let total = unsafecast<uint>(accountStore_forall(
-        getGlobalAccountStore(),
+        evmCallStack_getAccountStoreInCurrentContext(),
         unsafecast<func(Account, any) -> any>(totalEthClosure),
         0
     ));
@@ -555,6 +528,18 @@ impure func arbowner_getAllFairGasPriceSenders(_topFrame: EvmCallFrame, calldata
     }
 }
 
+// function getLastUpgradeHash() external view returns(bytes32);
+impure func arbowner_getLastUpgradeHash(_topFrame: EvmCallFrame, calldata: ByteArray) {
+    if (bytearray_size(calldata) != 4) {
+        evmOp_revert_knownPc(190, 0, 0);
+    }
+    let mem = bytearray_set256(bytearray_new(0), 0, uint(previousArbosUpgradeHash));
+    if (evmCallStack_setTopFrameMemory(mem)) {
+        evmOp_return(0, 32);
+    } else {
+        evmOp_revert_knownPc(191, 0, 0);
+    }
+}
 
 
 

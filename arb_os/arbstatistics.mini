@@ -2,7 +2,6 @@
 // Copyright 2021, Offchain Labs, Inc. All rights reserved.
 //
 
-use accounts::getGlobalAccountStore;
 use accounts::accountStore_getNumAccounts;
 use accounts::accountStore_getNumContracts;
 
@@ -11,6 +10,7 @@ use evmCallStack::evmCallStack_topFrame;
 use evmCallStack::evmCallStack_setTopFrameMemory;
 use evmCallStack::evmCallFrame_getCalldata;
 use evmCallStack::evmCallStack_callHitError;
+use evmCallStack::evmCallStack_getAccountStoreInCurrentContext;
 
 use evmOps::evmOp_return;
 use evmOps::evmOp_revert_knownPc;
@@ -30,7 +30,7 @@ public impure func arbStatistics_txcall() {
         if (bytearray_size(calldata) < 4) {
             evmOp_revert_knownPc(0, 0, 0);
         }
-        let funcCode = asm(224, bytearray_get256(calldata, 0)) uint { shr };
+        let funcCode = (bytearray_get256(calldata, 0) >> 224);
         if (funcCode == const::funcCode_ArbStatistics_getStats) {
             arbStatistics_getStats(topFrame, calldata);
         } else {
@@ -50,11 +50,11 @@ impure func arbStatistics_getStats(_topFrame: EvmCallFrame, calldata: ByteArray)
 
     let mem = bytearray_new(0);
     let mem = bytearray_set256(mem, 0, inbox_currentArbBlockNumber());
-    let mem = bytearray_set256(mem, 32, accountStore_getNumAccounts(getGlobalAccountStore()));
+    let mem = bytearray_set256(mem, 32, accountStore_getNumAccounts(evmCallStack_getAccountStoreInCurrentContext()));
     let mem = bytearray_set256(mem, 2*32, arbStats.storage);
     let mem = bytearray_set256(mem, 3*32, arbStats.arbGasUsed);
     let mem = bytearray_set256(mem, 4*32, arbStats.numTxReceipts);
-    let mem = bytearray_set256(mem, 5*32, accountStore_getNumContracts(getGlobalAccountStore()));
+    let mem = bytearray_set256(mem, 5*32, accountStore_getNumContracts(evmCallStack_getAccountStoreInCurrentContext()));
 
     if (evmCallStack_setTopFrameMemory(mem)) {
         evmOp_return(0, bytearray_size(mem));

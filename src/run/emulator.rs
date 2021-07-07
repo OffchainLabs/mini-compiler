@@ -1235,9 +1235,9 @@ impl Machine {
         if let MachineState::Running(pc) = self.state {
             Some(match self.code.get_insn(pc)?.opcode {
                 AVMOpcode::Zero => 5,
-                AVMOpcode::Plus => 3,
+                AVMOpcode::Add => 3,
                 AVMOpcode::Mul => 3,
-                AVMOpcode::Minus => 3,
+                AVMOpcode::Sub => 3,
                 AVMOpcode::Div => 4,
                 AVMOpcode::Sdiv => 7,
                 AVMOpcode::Mod => 4,
@@ -1262,19 +1262,19 @@ impl Machine {
                 AVMOpcode::ShiftArith => 4,
                 AVMOpcode::Hash => 7,
                 AVMOpcode::Type => 3,
-                AVMOpcode::Hash2 => 8,
+                AVMOpcode::EthHash2 => 8,
                 AVMOpcode::Keccakf => 600,
                 AVMOpcode::Sha256f => 250,
                 AVMOpcode::Ripemd160f => 250, //TODO: measure and update this
                 AVMOpcode::Blake2f => self.gas_for_blake2f(),
                 AVMOpcode::Pop => 1,
-                AVMOpcode::PushStatic => 1,
-                AVMOpcode::Rget => 1,
+                AVMOpcode::Spush => 1,
+                AVMOpcode::Rpush => 1,
                 AVMOpcode::Rset => 2,
                 AVMOpcode::Jump => 4,
                 AVMOpcode::Cjump => 4,
                 AVMOpcode::StackEmpty => 2,
-                AVMOpcode::GetPC => 1,
+                AVMOpcode::PCpush => 1,
                 AVMOpcode::AuxPush => 1,
                 AVMOpcode::AuxPop => 1,
                 AVMOpcode::AuxStackEmpty => 2,
@@ -1296,14 +1296,14 @@ impl Machine {
                 AVMOpcode::Send => 100,
                 AVMOpcode::InboxPeek => 40,
                 AVMOpcode::Inbox => 40,
-                AVMOpcode::Panic => 5,
+                AVMOpcode::Error => 5,
                 AVMOpcode::Halt => 10,
                 AVMOpcode::ErrCodePoint => 25,
                 AVMOpcode::PushInsn => 25,
                 AVMOpcode::PushInsnImm => 25,
                 AVMOpcode::OpenInsn => 25,
                 AVMOpcode::DebugPrint => 1,
-                AVMOpcode::GetGas => 1,
+                AVMOpcode::PushGas => 1,
                 AVMOpcode::SetGas => 1,
                 AVMOpcode::EcRecover => 20_000,
                 AVMOpcode::EcAdd => 3500,
@@ -1401,7 +1401,7 @@ impl Machine {
                         self.incr_pc();
                         Ok(true)
                     }
-                    AVMOpcode::Zero | AVMOpcode::Panic => {
+                    AVMOpcode::Zero | AVMOpcode::Error => {
                         Err(ExecutionError::new("panicked", &self.state, None))
                     }
                     AVMOpcode::Jump => {
@@ -1418,12 +1418,12 @@ impl Machine {
                         }
                         Ok(true)
                     }
-                    AVMOpcode::GetPC => {
+                    AVMOpcode::PCpush => {
                         self.stack.push_codepoint(self.get_pc()?);
                         self.incr_pc();
                         Ok(true)
                     }
-                    AVMOpcode::Rget => {
+                    AVMOpcode::Rpush => {
                         self.stack.push(self.register.clone());
                         self.incr_pc();
                         Ok(true)
@@ -1434,7 +1434,7 @@ impl Machine {
                         self.incr_pc();
                         Ok(true)
                     }
-                    AVMOpcode::PushStatic => {
+                    AVMOpcode::Spush => {
                         self.stack.push(self.static_val.clone());
                         self.incr_pc();
                         Ok(true)
@@ -1623,14 +1623,14 @@ impl Machine {
                         self.incr_pc();
                         Ok(true)
                     }
-                    AVMOpcode::Plus => {
+                    AVMOpcode::Add => {
                         let r1 = self.stack.pop_uint(&self.state)?;
                         let r2 = self.stack.pop_uint(&self.state)?;
                         self.stack.push_uint(r1.add(&r2));
                         self.incr_pc();
                         Ok(true)
                     }
-                    AVMOpcode::Minus => {
+                    AVMOpcode::Sub => {
                         let r1 = self.stack.pop_uint(&self.state)?;
                         let r2 = self.stack.pop_uint(&self.state)?;
                         self.stack.push_uint(r1.unchecked_sub(&r2));
@@ -1880,7 +1880,7 @@ impl Machine {
                         self.incr_pc();
                         Ok(true)
                     }
-                    AVMOpcode::Hash2 => {
+                    AVMOpcode::EthHash2 => {
                         let r1 = self.stack.pop_uint(&self.state)?;
                         let r2 = self.stack.pop_uint(&self.state)?;
                         self.stack.push_uint(Uint256::avm_hash2(&r1, &r2));
@@ -2065,7 +2065,7 @@ impl Machine {
                         self.incr_pc();
                         Ok(true)
                     }
-                    AVMOpcode::GetGas => {
+                    AVMOpcode::PushGas => {
                         self.stack.push(Value::Int(self.arb_gas_remaining.clone()));
                         self.incr_pc();
                         Ok(true)

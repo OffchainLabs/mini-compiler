@@ -181,7 +181,7 @@ public impure func arbFunctionTable_txcall() {
 }
 
 func getFuncCode(ba: ByteArray) -> uint {
-    return asm(224, bytearray_get256(ba, 0)) uint { shr };
+    return (bytearray_get256(ba, 0) >> 224);
 }
 
 public func arbosVersion() -> uint {

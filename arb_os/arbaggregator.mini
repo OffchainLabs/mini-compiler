@@ -39,7 +39,7 @@ public impure func arbaggregator_txcall() {
         if (bytearray_size(calldata) < 4) {
             evmOp_revert_knownPc(0, 0, 0);
         }
-        let funcCode = asm(224, bytearray_get256(calldata, 0)) uint { shr };
+        let funcCode = (bytearray_get256(calldata, 0) >> 224);
         if (funcCode == const::funcCode_ArbAggregator_getPreferredAggregator) {
             arbaggregator_getPreferredAggregator(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbAggregator_setPreferredAggregator) {

@@ -6,6 +6,6 @@ public func builtin_assert(assertion: (bool, any)) {
     let (success, print) = assertion;
     if (!success) {
         debug(print);
-        return panic;
+        return error;
     }
 }

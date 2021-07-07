@@ -103,7 +103,7 @@ impure func parseEvmCodeSegment(bs: ByteStream) -> EvmInstructionStack {
                 }
                 evmPc = evmPc + 1;
             }
-            if ((codeSegGlobals.unreachableMask & asm(opcode, 1) uint { shl }) != 0) { reachable = false;    }
+            if ((codeSegGlobals.unreachableMask & (1 << opcode)) != 0) { reachable = false;    }
         } else {
             return stack;
         }
@@ -115,7 +115,7 @@ public impure func codeSegment_init() {
     let opcode = 0;
     while (opcode < 256) {
         if (unreachableAfterOpcode(opcode)) {
-            mask = mask | asm(opcode, 1) uint { shl };
+            mask = mask | (1 << opcode);
         }
         opcode = opcode + 1;
     }

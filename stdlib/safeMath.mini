@@ -5,14 +5,14 @@
 public func safeAdd(x: uint, y: uint) -> uint {
     let ret = x + y;
     if (ret < x) {
-        panic;
+        error;
     }
     return ret;
 }
 
 public func safeSub(x: uint, y: uint) -> uint {
     if (x < y) {
-        panic;
+        error;
     }
     return x - y;
 }
@@ -20,7 +20,7 @@ public func safeSub(x: uint, y: uint) -> uint {
 public func safeMul(x: uint, y: uint) -> uint {
     let ret = x * y;
     if ((x != 0) && (y != (ret/x))) {
-        panic;
+        error;
     }
     return ret;
 }
@@ -28,7 +28,7 @@ public func safeMul(x: uint, y: uint) -> uint {
 public func safeToInt(x: uint) -> int {
     let ret = int(x);
     if (ret < int(0)) {
-        panic;
+        error;
     }
     return int(ret);
 }
@@ -37,11 +37,11 @@ public func safeAddInt(x: int, y: int) -> int {
     let ret = x + y;
     if (x > int(0)) {
         if (ret < y) {
-            panic;
+            error;
         }
     } elseif (x < int(0)) {
         if (ret > y) {
-            panic;
+            error;
         }
     }
     return ret;
@@ -51,11 +51,11 @@ public func safeSubInt(x: int, y: int) -> int {
     let ret = x - y;
     if (y > int(0)) {
         if (ret > x) {
-            panic;
+            error;
         }
     } elseif (y < int(0)) {
         if (ret < x) {
-            panic;
+            error;
         }
     }
     return ret;
@@ -64,14 +64,14 @@ public func safeSubInt(x: int, y: int) -> int {
 public func safeMulInt(x: int, y: int) -> int {
     let ret = x * y;
     if ((x != int(0)) && (y != (ret/x))) {
-        panic;
+        error;
     }
     return ret;
 }
 
 public func safeToUint(x: int) -> uint {
     if (x < int(0)) {
-        panic;
+        error;
     }
     return uint(x);
 }

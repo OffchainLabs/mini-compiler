@@ -78,7 +78,7 @@ public func marshalledBytes_firstByte(mb: MarshalledBytes) -> uint {
         contents = contents.rest;
         nbytes = nbytes-32;
     }
-    return asm(256-8, contents.first) uint { shr };
+    return contents.first >> (256-8);
 }
 
 public func marshalledBytes_hash(mb: MarshalledBytes) -> bytes32 {
@@ -171,16 +171,10 @@ public func bytearray_get64(ba: ByteArray, offset: uint) -> uint {
         let bytesToRead = ba.size-offset;
         offset = offset + ba.sliceOffset;
         if (offset + bytesToRead >= 8) {
-            let mask = asm(8*bytesToRead, 1) uint { shl } - 1;
-            return asm(8*(8-bytesToRead), mask & getbuffer64(ba.contents, offset+bytesToRead-8)) uint { shl };
+            let mask = (1 << (8*bytesToRead)) - 1;
+            return (mask & getbuffer64(ba.contents, offset+bytesToRead-8)) << (8*(8-bytesToRead));
         } else {
-            return asm(
-                64-8*bytesToRead,
-                asm(
-                    64-8*bytesToRead,
-                    getbuffer64(ba.contents, offset),
-                ) uint { shr }
-            ) uint { shl };
+            return (getbuffer64(ba.contents, offset) >> (64-8*bytesToRead)) << (64-8*bytesToRead);
         }
     }
     offset = offset + ba.sliceOffset;
@@ -197,16 +191,10 @@ public func bytearray_get256(ba: ByteArray, offset: uint) -> uint {
         let bytesToRead = ba.size-offset;
         offset = offset + ba.sliceOffset;
         if (offset + bytesToRead >= 32) {
-            let mask = asm(8*bytesToRead, 1) uint { shl } - 1;
-            return asm(8*(32-bytesToRead), mask & getbuffer256(ba.contents, offset+bytesToRead-32)) uint { shl };
+            let mask = (1 << (8*bytesToRead)) - 1;
+            return (mask & getbuffer256(ba.contents, offset+bytesToRead-32)) << (8*(32-bytesToRead));
         } else {
-            return asm(
-                256-8*bytesToRead,
-                asm(
-                    256-8*bytesToRead,
-                    getbuffer256(ba.contents, offset),
-                ) uint { shr }
-            ) uint { shl };
+            return (getbuffer256(ba.contents, offset) >> (256-8*bytesToRead)) << (256-8*bytesToRead);
         }
     }
     offset = offset + ba.sliceOffset;
@@ -350,7 +338,7 @@ public func bytearray_copy(
     }
     if (toOffset < (const::MaxByteArraySize-32)) {
         let val = getbuffer256(fromContents, fromOffset);
-        let mask = (~0) - (asm(8*nbytes, ~0) uint { shr });
+        let mask = (~0) - ((~0) >> (8*nbytes));
         toContents = setbuffer256(
             toContents,
             toOffset,
@@ -396,19 +384,19 @@ public func buffer_getCalldataUnits(buf: buffer, offset: uint, nbytes: uint) -> 
 
         // now we want to count the non-zero bytes in x
         // first, make the low-order bit of each byte be 1 iff the byte was nonzero, and 0 if the byte was zero
-        x = x | asm(1, x) uint { shr };
-        x = x | asm(2, x) uint { shr };
-        x = x | asm(4, x) uint { shr };
+        x = x | (x >> 1);
+        x = x | (x >> 2);
+        x = x | (x >> 4);
 
         // now mask off the other bits, so each byte is 1 iff it was originally nonzero, 0 otherwise
         x = x & 0x0101010101010101010101010101010101010101010101010101010101010101;
 
         // now add tree-wise, so the low-order byte of x gets the sum of the current bytes
-        x = x + asm(8, x) uint { shr };
-        x = x + asm(16, x) uint { shr };
-        x = x + asm(32, x) uint { shr };
-        x = x + asm(64, x) uint { shr };
-        x = x + asm(128, x) uint { shr };
+        x = x + (x >> 8);
+        x = x + (x >> 16);
+        x = x + (x >> 32);
+        x = x + (x >> 64);
+        x = x + (x >> 128);
 
         // finally discard all but the low-order byte, and add it into the cumulative count of non-zeroes
         nonzeroes = nonzeroes + (0xff & x);

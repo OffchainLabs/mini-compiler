@@ -10,7 +10,7 @@
 
 // Normal Mini code won't ever "reach inside" an array to disturb the integrity of this
 // data structure. But note that use of unsafe language features could lead to structural
-// damage to the internals of an array, leading to erroneous results or even a panic.
+// damage to the internals of an array, leading to erroneous results or even an error.
 
 
 type block = [8]any    // this is basically a maximum-size AVM tuple
@@ -39,7 +39,7 @@ public func builtin_arrayNew(sz: uint, base_val: any) -> array {
 
 public func builtin_arrayGet(arr: array, index: uint) -> any {
 	if (index >= arr.size) {
-		panic;  // out of bounds access
+		error;  // out of bounds access
 	}
 	let res = arr.contents;
 	let chunk = arr.topstep;
@@ -56,14 +56,14 @@ public func builtin_arrayGetSafe(arr: array, index: uint) -> option<any> {
 	if (index >= arr.size) {
 		return None;
 	}
-	return Some(builtin_arrayGet(arr, index));  // won't panic, because we bounds-checked
+	return Some(builtin_arrayGet(arr, index));  // won't error, because we bounds-checked
 }
 
 public func builtin_arrayGetConsecutive(arr: array, index: uint) -> (any, any) {
 	// Get two consecutive items at [index] and [index+1]
 	// This will be faster than two separate arrayGets, in the common case.
 	if (index+1 >= arr.size) {
-		panic;
+		error;
 	}
 	return xif ((index % 8) == 7) {
 		// leaves are not in same bottom-level block, do it the slow way
@@ -90,7 +90,7 @@ public func builtin_arrayGetConsecutiveSafe(arr: array, index: uint) -> option<(
 
 public func builtin_arraySet(arr: array, index: uint, value: any) -> array {
 	if (index >= arr.size) {
-		panic;
+		error;
 	}
 	return arr with { contents: arraySet2(arr.contents, arr.topstep, index, value) };
 }
@@ -120,7 +120,7 @@ func arraySet2(b: block, chunkSize: uint, index: uint, value: any) -> block {
 public func builtin_arraySwap(a: array, index: uint, value: any) -> (array, any) {
     // Write a new value into a slot of the array, returning the old value that was in that slot
 	if (index >= a.size) {
-		panic;
+		error;
 	}
 	let sub = arraySwap2(a.contents, a.topstep, index, value);
 	return (
@@ -171,7 +171,7 @@ public func builtin_arrayOp(a: array, index: uint, closure: opClosure) -> (array
     // (newSlotContents, returnValue) = closure.f(closure.val, oldSlotContents)
     // This function returns (updatedArray, returnValue).
 	if (index >= a.size) {
-		panic;
+		error;
 	}
 	let sub = arrayOp2(a.contents, a.topstep, index, closure);
 	return (

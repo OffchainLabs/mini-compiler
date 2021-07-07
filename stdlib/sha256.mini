@@ -27,7 +27,7 @@ public func sha256hasher_new() -> Sha256Hasher {
 public func sha256hasher_pushByte(h: Sha256Hasher, b: uint) -> Sha256Hasher {
     let word = h.offset / 32;
     let newBuffer = h.buf with {
-        [word] = h.buf[word] ^ asm(248-8*(h.offset % 32), b&0xff) uint { shl }
+        [word] = h.buf[word] ^ (b&0xff << (248-8*(h.offset % 32)))
     };
     return xif (h.offset >= 63) {
         h with {
@@ -73,9 +73,9 @@ public func sha256hasher_push256(h: Sha256Hasher, val: uint) -> Sha256Hasher {
     } elseif (offset < 32) {
         h with {
             buf: h.buf with {
-                [0] = h.buf[0] | asm(8*offset, val) uint { shr }
+                [0] = h.buf[0] | (val >> (8*offset))
             } with {
-                [1] = h.buf[1] | asm(8*(32-offset), val) uint { shl }
+                [1] = h.buf[1] | (val << (8*(32-offset)))
             }
         } with {
             offset: 32+offset
@@ -88,11 +88,11 @@ public func sha256hasher_push256(h: Sha256Hasher, val: uint) -> Sha256Hasher {
             accumulator: asm(
                 h.accumulator,
                 h.buf[0],
-                h.buf[1] | asm(8*offset, val) uint { shr }
+                h.buf[1] | (val >> (8*offset))
             ) bytes32 { sha256f }
         } with {
             buf: unsafecast<[2]uint>((
-                asm(8*(32-offset), val) uint { shl },
+                val << 8*(32-offset),
                 0
             ))
         } with {

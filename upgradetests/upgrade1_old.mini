@@ -22,12 +22,12 @@ impure func main() {
     builder = xif let Some(bu) = avmCodeBuilder_append(builder, stream) {
         bu
     } else {
-        panic
+        error
     };
     let jumpTarget = avmCodeBuilder_finish(builder);
 
     asm(jumpTarget, 78) { jump };
 
     // should never get here
-    panic;
+    error;
 }

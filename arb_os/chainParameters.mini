@@ -28,7 +28,7 @@ public impure func chainParams_getOrDie(which: uint) -> uint {
     return xif let Some(val) = chainParams_get(which) {
         val
     } else {
-        panic
+        error
     };
 }
 

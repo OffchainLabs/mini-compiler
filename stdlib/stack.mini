@@ -16,7 +16,7 @@ public func stack_new() -> Stack {
 }
 
 public func stack_push(stack: Stack, value: any) -> Stack {
-    if let Some(cell) = unsafecast<option<StackCell>>(stack) {
+    if let Some(cell) = unsafecast<option<StackCell> >(stack) {
         if (cell.num < 8) {
             return Some(
                 cell with {

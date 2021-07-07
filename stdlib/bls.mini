@@ -286,7 +286,7 @@ func hashToField(
 ) -> (uint, uint) {
     let msg = expandMsgTo96(domain, messages);
 
-    let u1 = asm(64, bytearray_get256(msg, 0)) uint { shr };
+    let u1 = bytearray_get256(msg, 0) >> 64;
     let u0 = bytearray_get256(msg, 16) & const::MASK24;
     let a0 = asm(
         asm(u1, const::T24, const::N) uint { mulmod },

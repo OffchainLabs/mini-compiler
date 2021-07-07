@@ -105,7 +105,7 @@ func setupFromUnmarshal() -> ByteArray {
 	return xif let Some(ba) = bytearray_unmarshalBytes(marshalledStruct) {
 	    ba
 	} else {
-	    panic
+	    error
 	};
 }
 

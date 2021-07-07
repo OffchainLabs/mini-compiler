@@ -4,7 +4,6 @@
 
 //!Contains types and utilities for constructing the mini AST
 
-use crate::compile::ast::TypeMismatch::FuncArgLength;
 use crate::compile::typecheck::{
     AbstractSyntaxTree, InliningMode, PropertiesList, TypeCheckedNode,
 };
@@ -101,6 +100,7 @@ pub enum Type {
     Any,
     Every,
     Option(Box<Type>),
+    Union(Vec<Type>),
 }
 
 impl AbstractSyntaxTree for Type {
@@ -116,7 +116,9 @@ impl AbstractSyntaxTree for Type {
             | Type::Any
             | Type::Every
             | Type::Nominal(_, _) => vec![],
-            Type::Tuple(types) => types.iter_mut().map(|t| TypeCheckedNode::Type(t)).collect(),
+            Type::Tuple(types) | Type::Union(types) => {
+                types.iter_mut().map(|t| TypeCheckedNode::Type(t)).collect()
+            }
             Type::Array(tipe) | Type::FixedArray(tipe, _) | Type::Option(tipe) => {
                 vec![TypeCheckedNode::Type(tipe)]
             }
@@ -211,6 +213,207 @@ impl Type {
         }
     }
 
+    pub fn covariant_castable(
+        &self,
+        rhs: &Self,
+        type_tree: &TypeTree,
+        mut seen: HashSet<(Type, Type)>,
+    ) -> bool {
+        if *rhs == Type::Every {
+            return true;
+        }
+        match self {
+            Type::Any => *rhs != Type::Void,
+            Type::Uint | Type::Int | Type::Bool | Type::Bytes32 | Type::EthAddress => match &rhs {
+                Type::Uint | Type::Int | Type::Bool | Type::Bytes32 | Type::EthAddress => true,
+                _ => false,
+            },
+            Type::Buffer | Type::Void | Type::Every => rhs == self,
+            Type::Tuple(tvec) => {
+                if let Ok(Type::Tuple(tvec2)) = rhs.get_representation(type_tree) {
+                    type_vectors_covariant_castable(tvec, &tvec2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Array(t) => {
+                if let Ok(Type::Array(t2)) = rhs.get_representation(type_tree) {
+                    t.covariant_castable(&t2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::FixedArray(t, s) => {
+                if let Ok(Type::FixedArray(t2, s2)) = rhs.get_representation(type_tree) {
+                    (*s == s2) && t.covariant_castable(&t2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Struct(fields) => {
+                if let Ok(Type::Struct(fields2)) = rhs.get_representation(type_tree) {
+                    field_vectors_covariant_castable(fields, &fields2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Nominal(_, _) => {
+                if let (Ok(left), Ok(right)) = (
+                    self.get_representation(type_tree),
+                    rhs.get_representation(type_tree),
+                ) {
+                    if seen.insert((left.clone(), right.clone())) {
+                        left.covariant_castable(&right, type_tree, seen)
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
+            Type::Func(_, args, ret) => {
+                if let Type::Func(_, args2, ret2) = rhs {
+                    //note: The order of arg2 and args, and ret and ret2 are in this order to ensure contravariance in function arg types
+                    type_vectors_covariant_castable(args2, args, type_tree, seen.clone())
+                        && (ret.covariant_castable(ret2, type_tree, seen))
+                } else {
+                    false
+                }
+            }
+            Type::Map(key1, val1) => {
+                if let Type::Map(key2, val2) = rhs {
+                    if let Ok(val2) = val2.get_representation(type_tree) {
+                        key1.covariant_castable(key2, type_tree, seen.clone())
+                            && (val1.covariant_castable(&val2, type_tree, seen))
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+            Type::Option(_) => {
+                if let Ok(Type::Option(_)) = rhs.get_representation(type_tree) {
+                    true
+                } else {
+                    false
+                }
+            }
+            Type::Union(inner) => {
+                if let Ok(Type::Union(inner2)) = rhs.get_representation(type_tree) {
+                    type_vectors_covariant_castable(&*inner2, inner, type_tree, seen.clone())
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    pub fn castable(
+        &self,
+        rhs: &Self,
+        type_tree: &TypeTree,
+        mut seen: HashSet<(Type, Type)>,
+    ) -> bool {
+        if *rhs == Type::Every {
+            return true;
+        }
+        match self {
+            Type::Any => *rhs != Type::Void,
+            Type::Uint | Type::Int | Type::Bytes32 => match &rhs {
+                Type::Uint | Type::Int | Type::Bytes32 => true,
+                _ => false,
+            },
+            Type::EthAddress => match &rhs {
+                Type::Uint | Type::Int | Type::Bytes32 | Type::EthAddress => true,
+                _ => false,
+            },
+            Type::Bool => match &rhs {
+                Type::Uint | Type::Int | Type::Bool | Type::Bytes32 | Type::EthAddress => true,
+                _ => false,
+            },
+            Type::Buffer | Type::Void | Type::Every => rhs == self,
+            Type::Tuple(tvec) => {
+                if let Ok(Type::Tuple(tvec2)) = rhs.get_representation(type_tree) {
+                    type_vectors_castable(tvec, &tvec2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Array(t) => {
+                if let Ok(Type::Array(t2)) = rhs.get_representation(type_tree) {
+                    t.castable(&t2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::FixedArray(t, s) => {
+                if let Ok(Type::FixedArray(t2, s2)) = rhs.get_representation(type_tree) {
+                    (*s == s2) && t.castable(&t2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Struct(fields) => {
+                if let Ok(Type::Struct(fields2)) = rhs.get_representation(type_tree) {
+                    field_vectors_castable(fields, &fields2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Nominal(_, _) => {
+                if let (Ok(left), Ok(right)) = (
+                    self.get_representation(type_tree),
+                    rhs.get_representation(type_tree),
+                ) {
+                    if seen.insert((left.clone(), right.clone())) {
+                        left.castable(&right, type_tree, seen)
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
+            Type::Func(is_impure, args, ret) => {
+                if let Type::Func(is_impure2, args2, ret2) = rhs {
+                    //note: The order of arg2 and args, and ret and ret2 are in this order to ensure contravariance in function arg types
+                    (*is_impure || !is_impure2)
+                        && type_vectors_castable(args2, args, type_tree, seen.clone())
+                        && (ret.castable(ret2, type_tree, seen))
+                } else {
+                    false
+                }
+            }
+            Type::Map(key1, val1) => {
+                if let Type::Map(key2, val2) = rhs {
+                    if let Ok(val2) = val2.get_representation(type_tree) {
+                        key1.castable(key2, type_tree, seen.clone())
+                            && (val1.castable(&val2, type_tree, seen))
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+            Type::Option(inner) => {
+                if let Ok(Type::Option(inner2)) = rhs.get_representation(type_tree) {
+                    inner.castable(&inner2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Union(inner) => {
+                if let Ok(Type::Union(inner2)) = rhs.get_representation(type_tree) {
+                    type_vectors_castable(&*inner2, inner, type_tree, seen.clone())
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     ///Returns true if rhs is a subtype of self, and false otherwise
     pub fn assignable(
         &self,
@@ -298,6 +501,13 @@ impl Type {
             Type::Option(inner) => {
                 if let Ok(Type::Option(inner2)) = rhs.get_representation(type_tree) {
                     inner.assignable(&inner2, type_tree, seen)
+                } else {
+                    false
+                }
+            }
+            Type::Union(types) => {
+                if let Ok(Type::Union(types2)) = rhs.get_representation(type_tree) {
+                    type_vectors_assignable(types, &types2, type_tree, seen)
                 } else {
                     false
                 }
@@ -406,7 +616,7 @@ impl Type {
                         }
                     }
                     if args.len() != args2.len() {
-                        return Some(FuncArgLength(args.len(), args2.len()));
+                        return Some(TypeMismatch::FuncArgLength(args.len(), args2.len()));
                     }
                     if let Some(inner) = ret.first_mismatch(ret2, type_tree, seen) {
                         return Some(TypeMismatch::FuncReturn(Box::new(inner)));
@@ -444,6 +654,21 @@ impl Type {
                     inner
                         .first_mismatch(&inner2, type_tree, seen)
                         .map(|mismatch| TypeMismatch::Option(Box::new(mismatch)))
+                } else {
+                    Some(TypeMismatch::Type(self.clone(), rhs.clone()))
+                }
+            }
+            Type::Union(types) => {
+                if let Ok(Type::Union(types2)) = rhs.get_representation(type_tree) {
+                    for (index, (left, right)) in types.iter().zip(types2.iter()).enumerate() {
+                        if let Some(inner) = left.first_mismatch(right, type_tree, seen.clone()) {
+                            return Some(TypeMismatch::Union(index, Box::new(inner)));
+                        }
+                    }
+                    if types.len() != types2.len() {
+                        return Some(TypeMismatch::UnionLength(types.len(), types2.len()));
+                    }
+                    None
                 } else {
                     Some(TypeMismatch::Type(self.clone(), rhs.clone()))
                 }
@@ -550,6 +775,7 @@ impl Type {
             Type::Any => (Value::none(), true),
             Type::Every => (Value::none(), false),
             Type::Option(_) => (Value::new_tuple(vec![Value::Int(Uint256::zero())]), true),
+            Type::Union(_) => (Value::none(), false),
         }
     }
 
@@ -734,10 +960,54 @@ impl Type {
                     include_pathname,
                     type_tree,
                 );
-                (format!("option<{}>", display), subtypes)
+                (format!("option<{}> ", display), subtypes)
+            }
+            Type::Union(types) => {
+                let mut s = String::from("union<");
+                let mut subtypes = HashSet::new();
+                for tipe in types {
+                    let (name, new_subtypes) = tipe.display_indented(
+                        indent_level + 1,
+                        separator,
+                        prefix,
+                        include_pathname,
+                        type_tree,
+                    );
+                    s.push_str(&name);
+                    s.push_str(", ");
+                    subtypes.extend(new_subtypes);
+                }
+                s.push('>');
+                (s, subtypes)
             }
         }
     }
+}
+
+pub fn type_vectors_covariant_castable(
+    tvec1: &[Type],
+    tvec2: &[Type],
+    type_tree: &TypeTree,
+    seen: HashSet<(Type, Type)>,
+) -> bool {
+    tvec1.len() == tvec2.len()
+        && tvec1
+            .iter()
+            .zip(tvec2)
+            .all(|(t1, t2)| t1.covariant_castable(t2, type_tree, seen.clone()))
+}
+
+pub fn type_vectors_castable(
+    tvec1: &[Type],
+    tvec2: &[Type],
+    type_tree: &TypeTree,
+    seen: HashSet<(Type, Type)>,
+) -> bool {
+    tvec1.len() == tvec2.len()
+        && tvec1
+            .iter()
+            .zip(tvec2)
+            .all(|(t1, t2)| t1.castable(t2, type_tree, seen.clone()))
 }
 
 ///Returns true if each type in tvec2 is a subtype of the type in tvec1 at the same index, and tvec1
@@ -753,6 +1023,32 @@ pub fn type_vectors_assignable(
             .iter()
             .zip(tvec2)
             .all(|(t1, t2)| t1.assignable(t2, type_tree, seen.clone()))
+}
+
+fn field_vectors_covariant_castable(
+    tvec1: &[StructField],
+    tvec2: &[StructField],
+    type_tree: &TypeTree,
+    seen: HashSet<(Type, Type)>,
+) -> bool {
+    tvec1.len() == tvec2.len()
+        && tvec1.iter().zip(tvec2).all(|(t1, t2)| {
+            t1.tipe
+                .covariant_castable(&t2.tipe, type_tree, seen.clone())
+        })
+}
+
+fn field_vectors_castable(
+    tvec1: &[StructField],
+    tvec2: &[StructField],
+    type_tree: &TypeTree,
+    seen: HashSet<(Type, Type)>,
+) -> bool {
+    tvec1.len() == tvec2.len()
+        && tvec1
+            .iter()
+            .zip(tvec2)
+            .all(|(t1, t2)| t1.tipe.castable(&t2.tipe, type_tree, seen.clone()))
 }
 
 ///Identical to `type_vectors_assignable`
@@ -825,6 +1121,7 @@ impl PartialEq for Type {
             }
             (Type::Nominal(p1, id1), Type::Nominal(p2, id2)) => (p1, id1) == (p2, id2),
             (Type::Option(x), Type::Option(y)) => *x == *y,
+            (Type::Union(x), Type::Union(y)) => type_vectors_equal(x, y),
             (_, _) => false,
         }
     }
@@ -861,6 +1158,8 @@ pub enum TypeMismatch {
         inner: Box<TypeMismatch>,
     },
     Option(Box<TypeMismatch>),
+    Union(usize, Box<TypeMismatch>),
+    UnionLength(usize, usize),
     Purity,
 }
 
@@ -915,6 +1214,12 @@ impl fmt::Display for TypeMismatch {
                     inner
                 ),
                 TypeMismatch::Option(mismatch) => format!("in inner option type: {}", mismatch),
+                TypeMismatch::Union(index, mismatch) =>
+                    format!("In type {} of union: {}", index + 1, mismatch),
+                TypeMismatch::UnionLength(left, right) => format!(
+                    "left func has {} args but right func has {} args",
+                    left, right
+                ),
                 TypeMismatch::Purity => format!("assigning impure function to pure function"),
             }
         )
@@ -1049,38 +1354,57 @@ pub enum StatementKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MatchPattern<T = ()> {
     pub(crate) kind: MatchPatternKind<MatchPattern<T>>,
+    pub(crate) debug_info: DebugInfo,
     pub(crate) cached: T,
 }
 
 ///Either a single identifier or a tuple of identifiers, used in mini let bindings.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MatchPatternKind<T> {
-    Simple(StringId),
+    Bind(StringId),
+    Assign(StringId),
     Tuple(Vec<T>),
 }
 
 impl<T> MatchPattern<T> {
-    pub fn new_simple(id: StringId, cached: T) -> Self {
+    pub fn new_bind(id: StringId, debug_info: DebugInfo, cached: T) -> Self {
         Self {
-            kind: MatchPatternKind::Simple(id),
+            kind: MatchPatternKind::Bind(id),
+            debug_info,
             cached,
         }
     }
-    pub fn new_tuple(id: Vec<MatchPattern<T>>, cached: T) -> Self {
+    pub fn new_assign(id: StringId, debug_info: DebugInfo, cached: T) -> Self {
+        Self {
+            kind: MatchPatternKind::Assign(id),
+            debug_info,
+            cached,
+        }
+    }
+    pub fn new_tuple(id: Vec<MatchPattern<T>>, debug_info: DebugInfo, cached: T) -> Self {
         Self {
             kind: MatchPatternKind::Tuple(id),
+            debug_info,
             cached,
         }
     }
-    pub fn collect_identifiers(&self) -> Vec<StringId> {
+    pub fn collect_identifiers(&self) -> Vec<(StringId, bool, DebugInfo)> {
         match &self.kind {
-            MatchPatternKind::Simple(id) => vec![*id],
+            MatchPatternKind::Bind(id) => vec![(*id, false, self.debug_info)],
+            MatchPatternKind::Assign(id) => vec![(*id, true, self.debug_info)],
             MatchPatternKind::Tuple(pats) => pats
                 .iter()
                 .flat_map(|pat| pat.collect_identifiers())
                 .collect(),
         }
     }
+}
+
+///An identifier or array index for left-hand-side substructure assignments
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SubData {
+    Dot(StringId),
+    ArrayOrMap(Expr),
 }
 
 ///Represents a constant mini value of type Option<T> for some type T.
@@ -1173,15 +1497,22 @@ pub enum ExprKind {
     NewArray(Box<Expr>, Type),
     NewFixedArray(usize, Option<Box<Expr>>),
     NewMap(Type, Type),
+    NewUnion(Vec<Type>, Box<Expr>),
     ArrayOrMapMod(Box<Expr>, Box<Expr>, Box<Expr>),
     StructMod(Box<Expr>, String, Box<Expr>),
+    WeakCast(Box<Expr>, Type),
+    Cast(Box<Expr>, Type),
+    CovariantCast(Box<Expr>, Type),
     UnsafeCast(Box<Expr>, Type),
     Asm(Type, Vec<Instruction>, Vec<Expr>),
-    Panic,
+    Error,
+    GetGas,
+    SetGas(Box<Expr>),
     Try(Box<Expr>),
     If(Box<Expr>, CodeBlock, Option<CodeBlock>),
     IfLet(StringId, Box<Expr>, CodeBlock, Option<CodeBlock>),
     Loop(Vec<Statement>),
+    UnionCast(Box<Expr>, Type),
     NewBuffer,
 }
 

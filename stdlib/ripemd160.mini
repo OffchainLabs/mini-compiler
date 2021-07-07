@@ -29,7 +29,7 @@ public func ripemd160hasher_new() -> Ripemd160Hasher {
 public func ripemd160hasher_pushByte(h: Ripemd160Hasher, b: uint) -> Ripemd160Hasher {
     let word = h.offset / 32;
     let newBuffer = h.buf with {
-        [word] = h.buf[word] ^ asm(248-8*(h.offset % 32), b&0xff) uint { shl }
+        [word] = h.buf[word] ^ (b&0xff << (248-8*(h.offset % 32)))
     };
     return xif (h.offset >= 63) {
         h with {
@@ -75,9 +75,9 @@ public func ripemd160hasher_push256(h: Ripemd160Hasher, val: uint) -> Ripemd160H
     } elseif (offset < 32) {
         h with {
             buf: h.buf with {
-                [0] = h.buf[0] | asm(8*offset, val) uint { shr }
+                [0] = h.buf[0] | (val >> (8*offset))
             } with {
-                [1] = h.buf[1] | asm(8*(32-offset), val) uint { shl }
+                [1] = h.buf[1] | (val << (8*(32-offset)))
             }
         } with {
             offset: 32+offset
@@ -90,11 +90,11 @@ public func ripemd160hasher_push256(h: Ripemd160Hasher, val: uint) -> Ripemd160H
             accumulator: asm(
                 h.accumulator,
                 h.buf[0],
-                h.buf[1] | asm(8*offset, val) uint { shr }
+                h.buf[1] | (val >> (8*offset))
             ) bytes32 { ripemd160f }
         } with {
             buf: unsafecast<[2]uint>((
-                asm(8*(32-offset), val) uint { shl },
+                val << (8*(32-offset)),
                 0
             ))
         } with {

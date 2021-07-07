@@ -71,7 +71,7 @@ public func rlp_encodeUint(val: uint, ba: ByteArray, offset: uint) -> (ByteArray
         offset = offset + 1;
         while (length > 0) {
             length = length-1;
-            ba = bytearray_setByte(ba, offset, (asm(8*length, val) uint { shr }) & 0xff);
+            ba = bytearray_setByte(ba, offset, (val >> (8*length)) & 0xff);
             offset = offset+1;
         }
         (ba, origLen+1)
@@ -90,7 +90,7 @@ public func rlp_encodeUintFresh(val: uint) -> ByteArray {
             setbuffer256(
                 setbuffer8(newbuffer(), 0, 0x80+length),
                 1,
-                asm(256-8*length, val) uint { shl }
+                val << (256-8*length)
             ),
         )
     };
@@ -106,7 +106,7 @@ func rlp_hashUint(hasher: Hasher, val: uint) -> Hasher {
         hasher = hasher_pushByte(hasher, 0x80+length);
         while (length > 0) {
             length = length-1;
-            hasher = hasher_pushByte(hasher, (asm(8*length, val) uint { shr }) & 0xff);
+            hasher = hasher_pushByte(hasher, (val >> (8*length)) & 0xff);
         }
         hasher
     };
@@ -116,7 +116,7 @@ func rlp_hashAddress(hasher: Hasher, addr: address) -> Hasher {
     if (addr == address(0)) {
         return rlp_hashUint(hasher, 0);
     }
-    let addrBa = bytearray_set256(bytearray_new(0), 0, asm(256-160, uint(addr)) uint { shl });
+    let addrBa = bytearray_set256(bytearray_new(0), 0, uint(addr) << (256-160));
     return rlp_hashBytes(hasher, addrBa, 0, 20);
 }
 
@@ -132,7 +132,7 @@ public func rlp_encodeAddress(addr: address, ba: ByteArray, offset: uint) -> (By
     if (addr == address(0)) {
         return rlp_encodeUint(0, ba, offset);
     }
-    let addrBa = bytearray_set256(bytearray_new(0), 0, asm(256-160, uint(addr)) uint { shl });
+    let addrBa = bytearray_set256(bytearray_new(0), 0, uint(addr) << (256-160));
     return rlp_encodeBytes(addrBa, 0, 20, ba, offset);
 }
 
@@ -187,7 +187,7 @@ public func rlp_encodeBytes(
     let i = sizeOfSize;
     while (i > 0) {
         i = i-1;
-        outBytes = bytearray_setByte(outBytes, outOffset, asm(8*i, nbytes) uint { shr } & 0xff);
+        outBytes = bytearray_setByte(outBytes, outOffset, (nbytes >> (8*i)) & 0xff);
         outOffset = outOffset + 1;
     }
     return (
@@ -226,7 +226,7 @@ func rlp_hashBytes(hasher: Hasher, ba: ByteArray, offset: uint, nbytes: uint) ->
         let i = sizeOfSize;
         while (i > 0) {
             i = i-1;
-            hasher = hasher_pushByte(hasher, asm(8*i, nbytes) uint { shr } & 0xff);
+            hasher = hasher_pushByte(hasher, (nbytes >> (8*i)) & 0xff);
         }
         while (nbytes > 32) {
             hasher = hasher_pushN_be(hasher, bytearray_get256(ba, offset), 32);
@@ -289,7 +289,7 @@ public func rlp_encodeList(
         let i = sizeOfSize;
         while (i > 0) {
             i = i-1;
-            let b = asm(8*i, totalSize) uint { shr } & 0xff;
+            let b = (totalSize >> (8*i)) & 0xff;
             outBytes = bytearray_setByte(outBytes, outOffset, b);
             outOffset = outOffset+1;
         }
@@ -345,7 +345,7 @@ public func rlp_encodeMessageInfo(
         res.0
     } else {
         // This can't happen, because we know encodedPieces is big enough that accesses will be in-bounds
-        panic
+        error
     };
 }
 
@@ -374,7 +374,7 @@ public func rlp_encodeAndHashMessageInfoForSignature(tx: SignedTx, eip155chainId
         let i = sizeOfSize;
         while (i > 0) {
             i = i-1;
-            let b = asm(8*i, contentsSize) uint { shr } & 0xff;
+            let b = (contentsSize >> (8*i)) & 0xff;
             hasher = hasher_pushByte(hasher, b);
         }
     }

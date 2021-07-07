@@ -412,7 +412,7 @@ pub fn link(
         ]
     } else {
         vec![
-            Instruction::from_opcode(Opcode::AVMOpcode(AVMOpcode::Rget), DebugInfo::default()),
+            Instruction::from_opcode(Opcode::AVMOpcode(AVMOpcode::Rpush), DebugInfo::default()),
             Instruction::from_opcode_imm(
                 Opcode::AVMOpcode(AVMOpcode::Noop),
                 Value::none(),

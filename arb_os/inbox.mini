@@ -12,8 +12,8 @@ use std::queue::queuestack_new;
 use std::queue::queuestack_push;
 use std::queue::queuestack_get;
 
-use accounts::getGlobalAccountStore;
-use accounts::setGlobalAccountStore;
+use accounts::safeGetGlobalAccountStore;
+use accounts::safeSetGlobalAccountStore;
 use accounts::accountStore_get;
 use accounts::accountStore_set;
 use accounts::account_addToEthBalance;
@@ -376,8 +376,8 @@ impure func handleUnpackedMessage(msg: IncomingRequest) {
         let firstByte = bytearray_getByte(msg.msgData, 0);
         if (firstByte == const::L2MessageType_unsignedEOATx) {
             let callvalue = bytearray_get256(msg.msgData, 1+4*32);
-            let gAcctStore = getGlobalAccountStore();
-            setGlobalAccountStore(
+            let gAcctStore = safeGetGlobalAccountStore();
+            safeSetGlobalAccountStore(
                 accountStore_set(
                     gAcctStore,
                     msg.sender,
@@ -390,8 +390,8 @@ impure func handleUnpackedMessage(msg: IncomingRequest) {
             // else request was malformatted, ignore it but don't undo the deposit
         } elseif (firstByte == const::L2MessageType_unsignedContractTx) {
             let callvalue = bytearray_get256(msg.msgData, 1+3*32);
-            let gAcctStore = getGlobalAccountStore();
-            setGlobalAccountStore(
+            let gAcctStore = safeGetGlobalAccountStore();
+            safeSetGlobalAccountStore(
                 accountStore_set(
                     gAcctStore,
                     msg.sender,
@@ -474,9 +474,9 @@ impure func handleArrivingTx(tx: TxRequestData) {
         // before emitting a failure receipt, try to increment caller's sequence number
         if ((resultCode != const::TxResultCode_sequenceNumberTooLow) && (resultCode != const::TxResultCode_sequenceNumberTooHigh)) {
             if let Some(seqNum) = request.seqNum {
-                let gAcctStore = getGlobalAccountStore();
+                let gAcctStore = safeGetGlobalAccountStore();
                 if let Some(acct) = account_checkAndIncrSeqNum(accountStore_get(gAcctStore, request.caller), seqNum) {
-                    setGlobalAccountStore(accountStore_set(gAcctStore, request.caller, acct));
+                    safeSetGlobalAccountStore(accountStore_set(gAcctStore, request.caller, acct));
                 }
             }
         }
@@ -570,7 +570,7 @@ func incomingRequestQueue_getOrDie(q: IncomingRequestQueue) -> (IncomingRequestQ
     return xif let Some(res) = incomingRequestQueue_get(q) {
         res
     } else {
-        panic
+        error
     };
 }
 
@@ -608,7 +608,3 @@ func txRequestQueue_get(q: TxRequestQueue) -> option<(TxRequestQueue, TxRequestD
     let (uq, item) = queue_get(q.q)?;
     return Some((struct{ q: uq }, unsafecast<TxRequestData>(item)));
 }
-
-
-
-

@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches:
@@ -39,7 +40,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04]
-        rust: [stable, beta]
+        rust: [stable, nightly]
 
     steps:
       - name: Checkout
@@ -50,12 +51,20 @@ jobs:
           sudo apt-get update && sudo apt-get install -y \
             libasound2-dev libudev-dev build-essential pkg-config libssl-dev
 
-      - name: Install Rust ${{ matrix.rust }}
+      - name: Install rust ${{ matrix.rust }}
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: ${{ matrix.rust }}
           override: true
+          components: ${{ matrix.rust == 'nightly' && 'llvm-tools-preview' || '' }}
+
+      - name: Install grcov if supported for rust ${{ matrix.rust }}
+        uses: actions-rs/install@v0.1
+        if: matrix.rust == 'nightly'
+        with:
+          crate: grcov
+          version: latest
 
       - name: Cache rust build products
         uses: actions/cache@v2
@@ -74,12 +83,34 @@ jobs:
           command: build
           args: --all
 
+      - name: Set up code-coverage instrumentation if supported for rust ${{ matrix.rust }}
+        if: matrix.rust == 'nightly'
+        run: |
+          echo LLVM_PROFILE_FILE="your_name-%p-%m.profraw" >> $GITHUB_ENV
+          echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
+          echo RUSTFLAGS="-Zinstrument-coverage" >> $GITHUB_ENV
+          echo RUSTDOCFLAGS="-Cpanic=abort" >> $GITHUB_ENV
+
       - name: Install npm dependencies
         run: |
           sudo npm install -g yarn && cd contracts && yarn install
 
-      - name: Make and test ArbOs
+      - name: Make and test ArbOS
         run: make clean && make
 
       - name: Check if ArbOS changed
         run: git update-index --refresh && git diff-index HEAD --
+
+      - name: Create code-coverage files if supported for rust ${{ matrix.rust }}
+        if: matrix.rust == 'nightly'
+        run: |
+          grcov . --binary-path ./target/release/ -s . -t lcov --branch --ignore-not-existing -o lcov.info
+
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v1
+        if: matrix.rust == 'nightly'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
+          verbose: true

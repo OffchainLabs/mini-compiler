@@ -27,7 +27,7 @@ type FixedPoint = struct {
    shiftFactor: ByteArray,
 }
 
-func main(arg: option<RandomGenerator>) -> (option<RandomGenerator>, option<option<option<Queue>>>) {
+func main(arg: option<RandomGenerator>) -> (option<RandomGenerator>, option<option<option<Queue> > >) {
     
     let a = struct {
         val: arg,

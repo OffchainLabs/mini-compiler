@@ -196,7 +196,7 @@ fn strip_returns(to_strip: &mut TypeCheckedNode, _state: &(), _mut_state: &mut (
                                 debug_info: inner.debug_info,
                             }],
                             Some(Box::new(TypeCheckedExpr {
-                                kind: TypeCheckedExprKind::Panic,
+                                kind: TypeCheckedExprKind::Error,
                                 debug_info: inner.debug_info,
                             })),
                             None,
@@ -289,12 +289,14 @@ fn inline(
                                     func.args
                                         .iter()
                                         .map(|arg| {
-                                            TypeCheckedMatchPattern::new_simple(
+                                            TypeCheckedMatchPattern::new_bind(
                                                 arg.name,
+                                                arg.debug_info,
                                                 arg.tipe.clone(),
                                             )
                                         })
                                         .collect(),
+                                    func.debug_info,
                                     Type::Tuple(
                                         func.args.iter().map(|arg| arg.tipe.clone()).collect(),
                                     ),
@@ -517,34 +519,54 @@ fn flowcheck_liveliness(
                 TypeCheckedStatementKind::Let(pat, expr) => {
                     process!(vec![TypeCheckedNode::Expression(expr)], problems, false);
 
-                    let ids: BTreeMap<StringId, Location> = pat
+                    let ids: Vec<(StringId, bool, Location)> = pat
                         .collect_identifiers()
                         .iter()
-                        .map(|id| {
-                            (id.clone(), {
-                                // we can't know the location exactly at this point,
-                                // so we shift past the 'let' keyword
-                                let mut loc = stat.debug_info.location.unwrap().clone();
-                                loc.column = Column::from(loc.column.to_usize() + 4);
+                        .map(|(id, assigns, debug_info)| {
+                            (id.clone(), *assigns, {
+                                // since assign-type patterns prefix the variable with a star,
+                                // we have to shift over by one to line up the arrow.
+                                let mut loc = debug_info.location.unwrap().clone();
+                                loc.column = Column::from(
+                                    loc.column.to_usize()
+                                        + match assigns {
+                                            true => 1,
+                                            false => 0,
+                                        },
+                                );
                                 loc
                             })
                         })
                         .collect();
 
-                    for id in ids.keys() {
-                        if let Some(_) = born.get(id) {
+                    for (id, assigns, loc) in ids.iter() {
+                        if *assigns {
                             if let Some(loc) = alive.get(id) {
-                                problems.push((*loc, id.clone()))
+                                problems.push((*loc, id.clone()));
                             }
-                        }
+                            if let None = born.get(id) {
+                                reborn.insert(id.clone(), stat.debug_info.location.unwrap());
+                            }
+                            if !alive.contains_key(id) && !born.contains(id) && !killed.contains(id)
+                            {
+                                rescue.insert(id.clone());
+                            }
+                            alive.insert(*id, *loc);
+                        } else {
+                            if let Some(_) = born.get(id) {
+                                if let Some(loc) = alive.get(id) {
+                                    problems.push((*loc, id.clone()))
+                                }
+                            }
 
-                        if !alive.contains_key(id) && !born.contains(id) && !killed.contains(id) {
-                            rescue.insert(id.clone());
+                            if !alive.contains_key(id) && !born.contains(id) && !killed.contains(id)
+                            {
+                                rescue.insert(id.clone());
+                            }
+                            born.insert(*id);
+                            alive.insert(*id, *loc);
                         }
                     }
-
-                    born.extend(&mut ids.keys());
-                    alive.extend(&ids);
                     continue;
                 }
                 TypeCheckedStatementKind::While(..) => true,
@@ -831,16 +853,14 @@ impl AbstractSyntaxTree for TypeCheckedStatement {
         }
     }
     fn is_pure(&mut self) -> bool {
-        if let TypeCheckedStatementKind::Noop() | TypeCheckedStatementKind::ReturnVoid() = self.kind
-        {
-            true
-        } else if let TypeCheckedStatementKind::AssignGlobal(_, _) = self.kind {
-            false
-        } else if let TypeCheckedStatementKind::Asm(vec, _) = &self.kind {
-            vec.iter().all(|insn| insn.is_pure())
-                && self.child_nodes().iter_mut().all(|node| node.is_pure())
-        } else {
-            self.child_nodes().iter_mut().all(|node| node.is_pure())
+        match &mut self.kind {
+            TypeCheckedStatementKind::Noop() | TypeCheckedStatementKind::ReturnVoid() => true,
+            TypeCheckedStatementKind::AssignGlobal(_, _) => false,
+            TypeCheckedStatementKind::Asm(insns, _) => {
+                insns.iter().all(|insn| insn.is_pure())
+                    && self.child_nodes().iter_mut().all(|node| node.is_pure())
+            }
+            _ => self.child_nodes().iter_mut().all(|node| node.is_pure()),
         }
     }
 }
@@ -913,7 +933,9 @@ pub enum TypeCheckedExprKind {
     StructMod(Box<TypeCheckedExpr>, usize, Box<TypeCheckedExpr>, Type),
     Cast(Box<TypeCheckedExpr>, Type),
     Asm(Type, Vec<Instruction>, Vec<TypeCheckedExpr>),
-    Panic,
+    Error,
+    GetGas,
+    SetGas(Box<TypeCheckedExpr>),
     Try(Box<TypeCheckedExpr>, Type),
     If(
         Box<TypeCheckedExpr>,
@@ -940,9 +962,11 @@ impl AbstractSyntaxTree for TypeCheckedExpr {
             | TypeCheckedExprKind::Const(_, _)
             | TypeCheckedExprKind::NewBuffer
             | TypeCheckedExprKind::NewMap(_)
-            | TypeCheckedExprKind::Panic => vec![],
+            | TypeCheckedExprKind::GetGas
+            | TypeCheckedExprKind::Error => vec![],
             TypeCheckedExprKind::UnaryOp(_, exp, _)
             | TypeCheckedExprKind::Variant(exp)
+            | TypeCheckedExprKind::SetGas(exp)
             | TypeCheckedExprKind::TupleRef(exp, _, _)
             | TypeCheckedExprKind::DotRef(exp, _, _, _)
             | TypeCheckedExprKind::NewArray(exp, _, _)
@@ -1013,18 +1037,22 @@ impl AbstractSyntaxTree for TypeCheckedExpr {
         }
     }
     fn is_pure(&mut self) -> bool {
-        if let TypeCheckedExprKind::GlobalVariableRef(_, _) = self.kind {
-            false
-        } else if let TypeCheckedExprKind::FuncRef(_, tipe) = &self.kind {
-            if let Type::Func(impure, _, _) = tipe {
-                !*impure
-            } else {
-                panic!("Internal error: func ref has non function type")
+        match &mut self.kind {
+            TypeCheckedExprKind::FuncRef(_, tipe) => {
+                if let Type::Func(impure, _, _) = tipe {
+                    !*impure
+                } else {
+                    panic!("Internal error: func ref has non function type")
+                }
             }
-        } else if let TypeCheckedExprKind::Asm(_, instrs, args) = &mut self.kind {
-            instrs.iter().all(|inst| inst.is_pure()) && args.iter_mut().all(|expr| expr.is_pure())
-        } else {
-            self.child_nodes().iter_mut().all(|node| node.is_pure())
+            TypeCheckedExprKind::Asm(_, insns, args) => {
+                insns.iter().all(|insn| insn.is_pure())
+                    && args.iter_mut().all(|expr| expr.is_pure())
+            }
+            TypeCheckedExprKind::GlobalVariableRef(_, _)
+            | TypeCheckedExprKind::GetGas
+            | TypeCheckedExprKind::SetGas(_) => false,
+            _ => self.child_nodes().iter_mut().all(|node| node.is_pure()),
         }
     }
 }
@@ -1034,7 +1062,9 @@ impl TypeCheckedExpr {
     pub fn get_type(&self) -> Type {
         match &self.kind {
             TypeCheckedExprKind::NewBuffer => Type::Buffer,
-            TypeCheckedExprKind::Panic => Type::Every,
+            TypeCheckedExprKind::Error => Type::Every,
+            TypeCheckedExprKind::GetGas => Type::Uint,
+            TypeCheckedExprKind::SetGas(_t) => Type::Void,
             TypeCheckedExprKind::UnaryOp(_, _, t) => t.clone(),
             TypeCheckedExprKind::Binary(_, _, _, t) => t.clone(),
             TypeCheckedExprKind::Trinary(_, _, _, _, t) => t.clone(),
@@ -1100,6 +1130,7 @@ fn builtin_func_decls() -> Vec<Import> {
 pub fn sort_top_level_decls(
     decls: &[TopLevelDecl],
     file_path: Vec<String>,
+    builtins: bool,
 ) -> (
     Vec<Import>,
     BTreeMap<StringId, Func>,
@@ -1107,10 +1138,14 @@ pub fn sort_top_level_decls(
     Vec<GlobalVarDecl>,
     HashMap<usize, Type>,
 ) {
-    let mut imports: Vec<Import> = builtin_func_decls()
-        .into_iter()
-        .filter(|imp| imp.path != file_path)
-        .collect();
+    let mut imports = if builtins {
+        builtin_func_decls()
+            .into_iter()
+            .filter(|imp| imp.path != file_path)
+            .collect()
+    } else {
+        vec![]
+    };
     let mut funcs = BTreeMap::new();
     let mut named_types = HashMap::new();
     let mut func_table = HashMap::new();
@@ -1569,21 +1604,21 @@ fn typecheck_statement<'a>(
                     debug_info.location.into_iter().collect(),
                 ));
             }
-
             let (stat, bindings) = match &pat.kind {
-                MatchPatternKind::Simple(name) => (
+                MatchPatternKind::Bind(name) => (
                     TypeCheckedStatementKind::Let(
-                        TypeCheckedMatchPattern::new_simple(*name, tce_type.clone()),
+                        TypeCheckedMatchPattern::new_bind(*name, pat.debug_info, tce_type.clone()),
                         tc_expr,
                     ),
                     vec![(*name, tce_type)],
                 ),
+                MatchPatternKind::Assign(_) => unimplemented!(),
                 MatchPatternKind::Tuple(pats) => {
                     let (tc_pats, bindings) =
                         typecheck_patvec(tce_type.clone(), pats.to_vec(), debug_info.location)?;
                     (
                         TypeCheckedStatementKind::Let(
-                            TypeCheckedMatchPattern::new_tuple(tc_pats, tce_type),
+                            TypeCheckedMatchPattern::new_tuple(tc_pats, pat.debug_info, tce_type),
                             tc_expr,
                         ),
                         bindings,
@@ -1591,7 +1626,7 @@ fn typecheck_statement<'a>(
                 }
             };
 
-            for id in pat.collect_identifiers() {
+            for (id, _, _) in pat.collect_identifiers() {
                 if let Some(location_option) = undefinable_ids.get(&id) {
                     return Err(CompileError::new_type_error(
                         String::from("Variable has the same name as a top-level symbol"),
@@ -1787,9 +1822,20 @@ fn typecheck_patvec(
                 }
                 let pat = &patterns[i];
                 match &pat.kind {
-                    MatchPatternKind::Simple(name) => {
-                        tc_pats.push(TypeCheckedMatchPattern::new_simple(*name, rhs_type.clone()));
+                    MatchPatternKind::Bind(name) => {
+                        tc_pats.push(TypeCheckedMatchPattern::new_bind(
+                            *name,
+                            pat.debug_info,
+                            rhs_type.clone(),
+                        ));
                         bindings.push((*name, rhs_type.clone()));
+                    }
+                    MatchPatternKind::Assign(name) => {
+                        tc_pats.push(TypeCheckedMatchPattern::new_assign(
+                            *name,
+                            pat.debug_info,
+                            rhs_type.clone(),
+                        ));
                     }
                     MatchPatternKind::Tuple(_) => {
                         //TODO: implement this properly
@@ -1840,7 +1886,7 @@ fn typecheck_expr(
     Ok(TypeCheckedExpr {
         kind: match &expr.kind {
             ExprKind::NewBuffer => Ok(TypeCheckedExprKind::NewBuffer),
-            ExprKind::Panic => Ok(TypeCheckedExprKind::Panic),
+            ExprKind::Error => Ok(TypeCheckedExprKind::Error),
             ExprKind::UnaryOp(op, subexpr) => {
                 let tc_sub = typecheck_expr(
                     subexpr,
@@ -2302,6 +2348,37 @@ fn typecheck_expr(
                 Box::new(key_type.clone()),
                 Box::new(value_type.clone()),
             ))),
+            ExprKind::NewUnion(types, expr) => {
+                let tc_expr = typecheck_expr(
+                    expr,
+                    type_table,
+                    global_vars,
+                    func_table,
+                    return_type,
+                    type_tree,
+                    undefinable_ids,
+                    scopes,
+                )?;
+                let tc_type = tc_expr.get_type();
+                if types
+                    .iter()
+                    .any(|t| t.assignable(&tc_type, type_tree, HashSet::new()))
+                {
+                    Ok(TypeCheckedExprKind::Cast(
+                        Box::new(tc_expr),
+                        Type::Union(types.clone()),
+                    ))
+                } else {
+                    Err(CompileError::new_type_error(
+                        format!(
+                            "Type {} is not a member of type union: {}",
+                            tc_type.display(),
+                            Type::Union(types.clone()).display()
+                        ),
+                        loc.into_iter().collect(),
+                    ))
+                }
+            }
             ExprKind::StructInitializer(fieldvec) => {
                 let mut tc_fields = Vec::new();
                 let mut tc_fieldtypes = Vec::new();
@@ -2529,6 +2606,78 @@ fn typecheck_expr(
                     ))
                 }
             }
+            ExprKind::WeakCast(expr, t) => {
+                let tc_expr = typecheck_expr(
+                    expr,
+                    type_table,
+                    global_vars,
+                    func_table,
+                    return_type,
+                    type_tree,
+                    undefinable_ids,
+                    scopes,
+                )?;
+                if t.assignable(&tc_expr.get_type(), type_tree, HashSet::new()) {
+                    Ok(TypeCheckedExprKind::Cast(Box::new(tc_expr), t.clone()))
+                } else {
+                    Err(CompileError::new_type_error(
+                        format!(
+                            "Cannot weak cast from type {} to type {}",
+                            tc_expr.get_type().display(),
+                            t.display()
+                        ),
+                        debug_info.location.into_iter().collect(),
+                    ))
+                }
+            }
+            ExprKind::Cast(expr, t) => {
+                let tc_expr = typecheck_expr(
+                    expr,
+                    type_table,
+                    global_vars,
+                    func_table,
+                    return_type,
+                    type_tree,
+                    undefinable_ids,
+                    scopes,
+                )?;
+                if t.castable(&tc_expr.get_type(), type_tree, HashSet::new()) {
+                    Ok(TypeCheckedExprKind::Cast(Box::new(tc_expr), t.clone()))
+                } else {
+                    Err(CompileError::new_type_error(
+                        format!(
+                            "Cannot cast from type {} to type {}",
+                            tc_expr.get_type().display(),
+                            t.display()
+                        ),
+                        debug_info.location.into_iter().collect(),
+                    ))
+                }
+            }
+            ExprKind::CovariantCast(expr, t) => {
+                let tc_expr = typecheck_expr(
+                    expr,
+                    type_table,
+                    global_vars,
+                    func_table,
+                    return_type,
+                    type_tree,
+                    undefinable_ids,
+                    scopes,
+                )?;
+                if t.covariant_castable(&tc_expr.get_type(), type_tree, HashSet::new()) {
+                    Ok(TypeCheckedExprKind::Cast(Box::new(tc_expr), t.clone()))
+                } else {
+                    Err(CompileError::new_type_error(
+                        format!(
+                            "Cannot covariant cast from type {} to type {}",
+                            tc_expr.get_type().display(),
+                            t.display()
+                        ),
+                        debug_info.location.into_iter().collect(),
+                    ))
+                }
+            }
             ExprKind::UnsafeCast(expr, t) => Ok(TypeCheckedExprKind::Cast(
                 Box::new(typecheck_expr(
                     expr,
@@ -2597,6 +2746,30 @@ fn typecheck_expr(
                         ),
                         loc.into_iter().collect(),
                     )),
+                }
+            }
+            ExprKind::GetGas => Ok(TypeCheckedExprKind::GetGas),
+            ExprKind::SetGas(expr) => {
+                let expr = typecheck_expr(
+                    expr,
+                    type_table,
+                    global_vars,
+                    func_table,
+                    return_type,
+                    type_tree,
+                    undefinable_ids,
+                    scopes,
+                )?;
+                if expr.get_type() != Type::Uint {
+                    Err(CompileError::new_type_error(
+                        format!(
+                            "SetGas(_) requires a uint, found a {}",
+                            expr.get_type().display()
+                        ),
+                        debug_info.location.into_iter().collect(),
+                    ))
+                } else {
+                    Ok(TypeCheckedExprKind::SetGas(Box::new(expr)))
                 }
             }
             ExprKind::If(cond, block, else_block) => {
@@ -2755,6 +2928,40 @@ fn typecheck_expr(
                 undefinable_ids,
                 scopes,
             )?)),
+            ExprKind::UnionCast(expr, tipe) => {
+                let tc_expr = typecheck_expr(
+                    expr,
+                    type_table,
+                    global_vars,
+                    func_table,
+                    return_type,
+                    type_tree,
+                    undefinable_ids,
+                    scopes,
+                )?;
+                if let Type::Union(types) = tc_expr.get_type().get_representation(type_tree)? {
+                    if types.iter().any(|t| t == tipe) {
+                        Ok(TypeCheckedExprKind::Cast(Box::new(tc_expr), tipe.clone()))
+                    } else {
+                        Err(CompileError::new_type_error(
+                            format!(
+                                "Type {} is not a member of {}",
+                                tipe.display(),
+                                tc_expr.get_type().display()
+                            ),
+                            debug_info.location.into_iter().collect(),
+                        ))
+                    }
+                } else {
+                    Err(CompileError::new_type_error(
+                        format!(
+                            "Tried to unioncast from non-union type \"{}\"",
+                            tc_expr.get_type().display()
+                        ),
+                        debug_info.location.into_iter().collect(),
+                    ))
+                }
+            }
         }?,
         debug_info,
     })
@@ -3533,8 +3740,6 @@ fn typecheck_binary_op_const(
         | BinaryOp::NotEqual
         | BinaryOp::BitwiseAnd
         | BinaryOp::BitwiseOr
-        | BinaryOp::ShiftLeft
-        | BinaryOp::ShiftRight
         | BinaryOp::BitwiseXor
         | BinaryOp::Hash => {
             if t1 == t2 {
@@ -3608,6 +3813,50 @@ fn typecheck_binary_op_const(
                         "invalid argument types to logical or: \"{}\" and \"{}\"",
                         t1.display(),
                         t2.display()
+                    ),
+                    loc.into_iter().collect(),
+                ))
+            }
+        }
+        BinaryOp::ShiftLeft | BinaryOp::ShiftRight => {
+            if t1 == Type::Uint {
+                Ok(TypeCheckedExprKind::Const(
+                    Value::Int(match t2 {
+                        Type::Uint | Type::Int | Type::Bytes32 => {
+                            let x = val1.to_usize().ok_or_else(|| {
+                                CompileError::new_type_error(
+                                    format!(
+                                        "Attempt to shift {} left by {}, causing overflow",
+                                        val2, val1
+                                    ),
+                                    loc.into_iter().collect(),
+                                )
+                            })?;
+                            if op == BinaryOp::ShiftLeft {
+                                val2.shift_left(x)
+                            } else {
+                                val2.shift_right(x)
+                            }
+                        }
+                        _ => {
+                            return Err(CompileError::new_type_error(
+                                format!(
+                                    "Attempt to shift a {} by a {}, must shift an integer type by a uint",
+                                    t2.display(),
+                                    t1.display()
+                                ),
+                                loc.into_iter().collect(),
+                            ))
+                        }
+                    }),
+                    t1,
+                ))
+            } else {
+                Err(CompileError::new_type_error(
+                    format!(
+                        "Attempt to shift a {} by a {}, must shift an integer type by a uint",
+                        t2.display(),
+                        t1.display()
                     ),
                     loc.into_iter().collect(),
                 ))

@@ -62,7 +62,7 @@ public impure func arbosTest_txcall() {
 }
 
 func getFuncCode(ba: ByteArray) -> uint {
-    return asm(224, bytearray_get256(ba, 0)) uint { shr };
+    return bytearray_get256(ba, 0) >> 224;
 }
 
 impure func arbosTest_installAccount(topFrame: EvmCallFrame, calldata: ByteArray) { // (bool, uint, uint, bytes, bytes)
@@ -180,10 +180,10 @@ impure func arbosTest_burnArbGas(_topFrame: EvmCallFrame, calldata: ByteArray) {
         evmOp_revert_knownCodePc(address(const::Address_ArbosTest), 30, 0, 0);
     }
     let gasToBurn = bytearray_get256(calldata, 4) * const::Charging_DefaultArbGasDivisor;
-    let gasLeft = asm() uint { getgas };
+    let gasLeft = getGas();
     if (gasToBurn >= gasLeft) {
         gasToBurn = gasLeft - 1;
     }
-    asm(gasLeft - gasToBurn,) { setgas };
+    setGas(gasLeft - gasToBurn);
     evmOp_return(0, 0);
 }

@@ -43,7 +43,7 @@ use std::rlp::rlp_encodeUint;
 use std::queue::Queue;
 use std::queue::queue_put;
 
-use accounts::getGlobalAccountStore;
+use accounts::safeGetGlobalAccountStore;
 use accounts::accountStore_get;
 use accounts::account_getNextSeqNum;
 use accounts::account_getAggregatorDecompressionState;
@@ -186,7 +186,7 @@ public impure func decompressAndVerifyEcdsaSignedTx(
     let (_, txRequest) = decompressTx(bytestream_new(body), None<address>)?;
 
     let (seqNum, calldataUnitsDelta) = xif(originalRequest.kind == const::L1MessageType_L2ForGasEstimation) {
-        let realSnum = account_getNextSeqNum(accountStore_get(getGlobalAccountStore(), originalRequest.sender));
+        let realSnum = account_getNextSeqNum(accountStore_get(safeGetGlobalAccountStore(), originalRequest.sender));
         (
             realSnum,
             int(bytearray_getCalldataUnits(rlp_encodeUint(realSnum, bytearray_new(0), 0).0)) - int(16),
@@ -328,7 +328,7 @@ public impure func decompressAndVerifyBLSSignedTxBatch(
         );
 
         signerKeys = signerKeys with {
-            [i] = account_getBlsKey(accountStore_get(getGlobalAccountStore(), signerAddr))?
+            [i] = account_getBlsKey(accountStore_get(safeGetGlobalAccountStore(), signerAddr))?
         };
 
         let aggregator = originalRequest.sender;
@@ -411,7 +411,7 @@ impure func decompressTx(
         stream = ustr;
         let dbSeqNum = account_getNextSeqNum(
             accountStore_get(
-                getGlobalAccountStore(),
+                safeGetGlobalAccountStore(),
                 address(sender)
             )
         );

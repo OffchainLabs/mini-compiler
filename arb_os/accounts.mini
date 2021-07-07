@@ -1,5 +1,5 @@
 //
-// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+// Copyright 2020-2021, Offchain Labs, Inc. All rights reserved.
 //
 
 use retrybuffer::RetryBuffer;
@@ -29,6 +29,7 @@ use chainParameters::chainParams_getOrDie;
 use codeSegment::translateEvmCodeSegment;
 use decompression::AggregatorDecompressionState;
 use evmCallStack::evmCallStack_addStorageCharge;
+use evmCallStack::evmCallStack_isEmpty;
 
 
 type AccountStore = struct {
@@ -110,6 +111,22 @@ public impure func accounts_notifyParamsChanged() {
     globalAccountStore = globalAccountStore with {
         retryBuffer: retryBuffer_setDefaultLifetime(globalAccountStore.retryBuffer)
     };
+}
+
+public impure func safeGetGlobalAccountStore() -> AccountStore {
+    if ( ! evmCallStack_isEmpty()) {
+        asm(668,) { debugprint };
+        error;
+    }
+    return globalAccountStore;
+}
+
+public impure func safeSetGlobalAccountStore(acctStore: AccountStore) {
+    if ( ! evmCallStack_isEmpty()) {
+        asm(669,) { debugprint };
+        error;
+    }
+    globalAccountStore = acctStore;
 }
 
 public impure func getGlobalAccountStore() -> AccountStore {
@@ -241,7 +258,7 @@ public func account_getBalance(account: Account) -> uint {
     return account.ethBalance;
 }
 
-public func account_getEvmJumpTable(account: Account) -> option<map<uint, impure func()>> {
+public func account_getEvmJumpTable(account: Account) -> option<map<uint, impure func()> > {
     return Some((account.contractInfo?).evmJumpTable);
 }
 
@@ -713,7 +730,7 @@ public impure func accountStore_createOrAddCodeRef(
         Some((
             accountStore_createCodeRef(acctStore, code, evmJumpTable, startCodePoint),
             unsafecast<impure func()>(startCodePoint),
-            unsafecast<map<uint, impure func()>>(evmJumpTable),
+            unsafecast<map<uint, impure func()> >(evmJumpTable),
             true,
         ))
     };
@@ -759,7 +776,7 @@ public func accountStore_dropCodeRef(acctStore: AccountStore, codeHash: bytes32)
     return xif let Some(codeRef) = acctStore.codeRefTable[codeHash] {
         acctStore with {
             codeRefTable: xif (codeRef.refCount == 1) {
-                unsafecast<map<bytes32, CodeRef>>(
+                unsafecast<map<bytes32, CodeRef> >(
                     builtin_kvsDelete(unsafecast<Kvs>(acctStore.codeRefTable), uint(codeHash))
                 )
             } else {

@@ -2,8 +2,8 @@
 // Copyright 2021, Offchain Labs, Inc. All rights reserved.
 //
 
-use accounts::getGlobalAccountStore;
-use accounts::setGlobalAccountStore;
+use accounts::safeGetGlobalAccountStore;
+use accounts::safeSetGlobalAccountStore;
 use accounts::accountStore_get;
 use accounts::accountStore_set;
 use accounts::accountStore_getRetryBuffer;
@@ -21,6 +21,8 @@ use evmCallStack::setRetryBufferInCurrentContext;
 use evmCallStack::evmCallStack_callRetryableTxAndReturn;
 use evmCallStack::evmCallStack_transferEthFromEscrow;
 use evmCallStack::evmCallStack_currentTxRequestGasBid;
+use evmCallStack::evmCallStack_getAccountStoreInCurrentContext;
+use evmCallStack::evmCallStack_setAccountStoreInCurrentContext;
 
 use evmlogs::EvmLogs;
 use evmlogs::evmlogs_empty;
@@ -238,7 +240,7 @@ public impure func retryBuffer_delete(rbuf: RetryBuffer, txId: uint, withRefund:
     return xif let Some(rtx) = retryBuffer_get(rbuf, txId) {
         // delete the tx
         rbuf = rbuf with {
-            byTxId: unsafecast<map<uint, RetryableTx>>(
+            byTxId: unsafecast<map<uint, RetryableTx> >(
                 builtin_kvsDelete(unsafecast<Kvs>(rbuf.byTxId), txId)
             )
         };
@@ -249,12 +251,12 @@ public impure func retryBuffer_delete(rbuf: RetryBuffer, txId: uint, withRefund:
             // credit the escrowed callvalue back to the beneficiary
             if (evmCallStack_isEmpty()) {
                 if let Some(astore) = accountStore_payFromEscrow(
-                    getGlobalAccountStore(),
+                    evmCallStack_getAccountStoreInCurrentContext(),
                     rtx.callvalueEscrowKey,
                     rtx.beneficiary,
                     rtx.callvalue
                 ) {
-                    setGlobalAccountStore(astore);
+                    evmCallStack_setAccountStoreInCurrentContext(astore);
                 }  // else something went badly wrong and we can't refund the callvalue
             } else {
                 // try to refund from the escrow, ignoring errors (which should never happen)
@@ -287,8 +289,8 @@ public impure func processRetryableTx(req: IncomingRequest) -> option<TxRequestD
 
     if (creditBack == address(0)) { creditBack = sender; }
 
-    let rbuffer = retryBuffer_trimTwo(getGlobalAccountStore().retryBuffer);
-    let acctStore = getGlobalAccountStore() with { retryBuffer: rbuffer };
+    let rbuffer = retryBuffer_trimTwo(safeGetGlobalAccountStore().retryBuffer);
+    let acctStore = safeGetGlobalAccountStore() with { retryBuffer: rbuffer };
 
     // deposited funds from L1 go into the sender's account
     if (deposit > 0) {
@@ -376,7 +378,7 @@ public impure func processRetryableTx(req: IncomingRequest) -> option<TxRequestD
                     immediateCalldata = bytearray_set256(
                         immediateCalldata,
                         0,
-                        asm(256-32, const::funcCode_ArbRetryableTx_redeem) uint { shl },
+                        const::funcCode_ArbRetryableTx_redeem << (256-32),
                     );
                     immediateCalldata = bytearray_set256(immediateCalldata, 4, txId);
 
@@ -455,7 +457,7 @@ public impure func processRetryableTx(req: IncomingRequest) -> option<TxRequestD
         None<TxRequestData>
     };
 
-    setGlobalAccountStore(acctStore);
+    safeSetGlobalAccountStore(acctStore);
 
     return ret;
 }
@@ -545,7 +547,7 @@ public impure func redeemRetryableTxInTx(txToRedeem: uint) -> (bool, ByteArray) 
                 rtx with {
                     l1Message: adjustGasInfoInFakeIncomingRequest(
                         rtx.l1Message,
-                        63 * (asm() uint { getgas }) / (64 * const::Charging_ArbGasPerAvmGas),  // inner tx will get approximately this much gas
+                        63 * (getGas()) / (64 * const::Charging_ArbGasPerAvmGas),  // inner tx will get approximately this much gas
                         evmCallStack_currentTxRequestGasBid(),
                     )
                 }

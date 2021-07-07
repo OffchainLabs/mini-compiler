@@ -111,7 +111,7 @@ public func bytestream_getPartialWord(bs: ByteStream, nbytes: uint) -> option<(B
     } else {
         Some((
             bs with { currentOffset: bs.currentOffset+nbytes },
-            asm(256-8*nbytes, getbuffer256(bs.buf, bs.currentOffset+bs.slice)) uint { shr },
+            (getbuffer256(bs.buf, bs.currentOffset+bs.slice) >> (256-8*nbytes)),
         ))
     };
 }

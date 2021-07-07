@@ -1,12 +1,12 @@
 //
-// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+// Copyright 2020-2021, Offchain Labs, Inc. All rights reserved.
 //
 
 
 use accounts::AccountStore;
 use accounts::accountStore_init;
-use accounts::getGlobalAccountStore;
-use accounts::setGlobalAccountStore;
+use accounts::safeGetGlobalAccountStore;
+use accounts::safeSetGlobalAccountStore;
 use accounts::accountStore_createAccountFromEvmCode;
 use accounts::accountStore_upgradeContractFromEvmCode;
 
@@ -42,8 +42,6 @@ use inbox::emitGenesisBlockReceipt;
 use output::output_init;
 use output::txReceipts_init;
 
-use pluggables::pluggables_init;
-
 use precompiles::precompiles_init;
 
 use std::bytearray::bytearray_unmarshalBytes;
@@ -71,7 +69,7 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
         codeSegment_init();
 
         if (initializePreinstalls(true) == None<()>) {
-            panic;   // don't try to run without preinstalls and precompiles
+            error;   // don't try to run without preinstalls and precompiles
         }
     } else {
         // this is a clean start, not an upgrade
@@ -79,7 +77,6 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
         chainParams_init();
         arbStatistics_init();
 
-        pluggables_init();
         codeSegment_init();
         output_init();
         decompression_init();
@@ -94,7 +91,7 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
         arbowner_init();
         txReceipts_init();
         if (initializePreinstalls(false) == None<()>) {
-            panic;   // don't try to run without preinstalls and precompiles
+            error;   // don't try to run without preinstalls and precompiles
         }
 
         // advance the Arbitrum block number, and emit a block receipt
@@ -107,7 +104,7 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
 }
 
 impure func initializePreinstalls(isUpgrade: bool) -> option<()> {
-    let acctStore = getGlobalAccountStore();
+    let acctStore = safeGetGlobalAccountStore();
 
     let code = bytearray_unmarshalBytes(getArbInfoCode())?;
     let (initCodePt, evmJumpTable, _) = translateEvmCodeSegment(
@@ -136,7 +133,7 @@ impure func initializePreinstalls(isUpgrade: bool) -> option<()> {
     // set up precompiled contracts
     acctStore = precompiles_init(acctStore, isUpgrade)?;
 
-    setGlobalAccountStore(acctStore);
+    safeSetGlobalAccountStore(acctStore);
 
     return Some(());
 }

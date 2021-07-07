@@ -24,11 +24,11 @@ impure func main(old: OldGlobals) -> uint{
     newGlobal2 = old.global1;
 
     if (newGlobal1 != Some(-3s)) {
-        panic;
+        error;
     }
 
     if (newGlobal2 != 5) {
-        panic;
+        error;
     }
 
     asm(42,) { debugprint };

@@ -4,9 +4,15 @@
 
 use bridge_arbos_versions::GlobalsBeforeUpgrade;
 
+use evmCallStack::EvmCallFrame;
+
 
 public func set_globalChainParameters_onUpgrade(oldGlobals: GlobalsBeforeUpgrade) -> map<uint, uint> {
     return oldGlobals.globalChainParameters
         with { [const::Atom_Param_GasPriceOracle] = const::Default_Param_GasPriceOracle }
     ;
+}
+
+public func set_globalCallStack_onUpgrade(_oldGlobals: GlobalsBeforeUpgrade) -> option<EvmCallFrame> {
+    return None<EvmCallFrame>;
 }

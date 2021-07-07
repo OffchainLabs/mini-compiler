@@ -161,7 +161,6 @@
     "LogType_sendMerkleTree": 3,
     "LogType_txReceipt": 0,
     "NumEvmOps": 48,
-    "PluggableModuleID_precompile_0x05": 1,
     "SendType_sendTxToL1": 3,
     "TraceEvent_call": 0,
     "TraceEvent_returnOrRevert": 1,

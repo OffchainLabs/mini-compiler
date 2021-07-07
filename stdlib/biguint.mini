@@ -18,11 +18,11 @@ func modDigit(x: uint) -> uint {
 }
 
 func divDigit(x: uint) -> uint {
-    return asm(80, x) uint { shr };
+    return x >> 80;
 }
 
 func mulDigit(x: uint) -> uint {
-    return asm(80, x) uint { shl };
+    return x << 80;
 }
 
 func realSize(x: []uint) -> uint {
@@ -106,7 +106,7 @@ public func biguint_toBytes(x: []uint) -> ByteArray {
     let digit = ndigits;
     while (digit > 0) {
         digit = digit-1;
-        ret = bytearray_set256(ret, 10*((ndigits-1)-digit), asm(256-80, x[digit]) uint { shl });
+        ret = bytearray_set256(ret, 10*((ndigits-1)-digit), x[digit] << (256-80));
     }
 
     if ((nbytes%10) == 0) {
@@ -150,7 +150,7 @@ public func biguint_sizeBits(x: []uint) -> uint {
     if (bytesSize == 0) {    return 0;    }
 
     let sz = 8 * (bytesSize - 1);
-    let topByte = (asm(8*(bytesSize%10), x[((bytesSize+9)/10)-1]) uint { shr }) & 0xff;
+    let topByte = (x[((bytesSize+9)/10)-1] >> (8*(bytesSize%10))) & 0xff;
     if (topByte >= 16) {
         sz = sz + 4;
         topByte = topByte / 16;
@@ -230,7 +230,7 @@ public func biguint_equal(x: []uint, y: []uint) -> bool {
 public func biguint_getBit(x: []uint, bnum: uint) -> uint {
     if (bnum >= 80*len(x)) {    return 0;    }
 
-    return (asm(bnum%80, x[bnum/80]) uint { shr }) & 1;
+    return (x[bnum/80] >> (bnum%80)) & 1;
 }
 
 public func biguint_shiftLeft(x: []uint, n: uint) -> []uint {
@@ -246,7 +246,7 @@ public func biguint_shiftLeft(x: []uint, n: uint) -> []uint {
     let i = 0;
     let carry = 0;
     while(i < numWordsBefore) {
-        carry = carry + asm(bitsToShift, x[i]) uint { shl };
+        carry = carry + (x[i] << bitsToShift);
         ret = ret with { [i+wordsToShift] = modDigit(carry) };
         carry = divDigit(carry);
         i = i+1;
@@ -427,7 +427,7 @@ public func biguint_divmod(x: []uint, y: []uint) -> option<([]uint, []uint)> {
         if let Some(diff) = biguint_subtract(x, ybnt) {
             x = diff;
         } else {
-            panic;
+            error;
         }
     }
 
@@ -466,7 +466,7 @@ public func biguint_divmod(x: []uint, y: []uint) -> option<([]uint, []uint)> {
             ) {
                 x = diff;
             } else {
-                panic;
+                error;
             }
         }
         i = i-1;
@@ -502,7 +502,7 @@ public func biguint_mod(x: []uint, y: []uint) -> option<[]uint> {
         if let Some(diff) = biguint_subtract(x, ybnt) {
             x = diff;
         } else {
-            panic;
+            error;
         }
     }
 
@@ -536,10 +536,10 @@ public func biguint_mod(x: []uint, y: []uint) -> option<[]uint> {
             ) {
                 x = diff;
             } else {
-                panic;
+                error;
             }
         }
-        if (x[i] != 0) { panic; }
+        if (x[i] != 0) { error; }
         i = i-1;
     }
     return Some(biguint_shiftRight(x, shiftBits));

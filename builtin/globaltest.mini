@@ -45,8 +45,8 @@ impure func tests() -> uint {
     }
 
     let sum = asm (4, 0, 3) uint {
-        plus
-        plus
+        add
+        add
     };
     if (sum != 7) {
         return 5;
@@ -89,21 +89,21 @@ impure func tests() -> uint {
         return 14;
     }
 
-    if ((asm(12, 0xbe) uint { shl }) != 0xbe000) {
+    if ((0xbe << 12) != 0xbe000) {
         return 15;
     }
 
-    if (asm(5, 32*581249+17) uint { shr } != 581249) {
+    if (((32*581249+17) >> 5) != 581249) {
         return 16;
     }
 
-    if (asm(244, ~0) uint { shr } != 0xfff) {
+    if (((~0) >> 244) != 0xfff) {
         return 17;
     }
 
     let testInt = int(0);
     testInt = testInt - int(16395);
-    let shiftedTestInt = asm(159, testInt) int { shl };
+    let shiftedTestInt = testInt << int(159);
     let shiftedBack = asm(159, shiftedTestInt) int { sar };
     if (shiftedBack != testInt) {
         return 18;

@@ -76,7 +76,7 @@ impure func main(kind: uint, value: any) {
                 asm(3,) { log };
             }
         } else {
-            panic;
+            error;
         }
     } elseif (kind == 2) {
         let vals = unsafecast<(uint, MarshalledBytes, uint)>(value);
@@ -95,7 +95,7 @@ impure func main(kind: uint, value: any) {
                 asm(4,) { log };
             }
         } else {
-            panic;
+            error;
         }
     }
 
@@ -129,11 +129,11 @@ func testRlpHasher() {
         let (_, tx) = res;
         if (keccak256(oldBuf, 0, bytearray_size(oldBuf)) != rlp_encodeAndHashMessageInfoForSignature(tx, Some(tx.v))) {
             asm(12,) { debugprint };
-            panic;
+            error;
         }
     } else {
         asm(13,) { debugprint };
-        panic;
+        error;
     }
 
     let newWay = rlp_encodeAndHashMessageInfoForSignature(
@@ -152,7 +152,7 @@ func testRlpHasher() {
     );
 
     if (keccak256(oldBuf, 0, bytearray_size(oldBuf)) != newWay) {
-        panic;
+        error;
     }
 }
 

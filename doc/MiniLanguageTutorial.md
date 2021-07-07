@@ -48,6 +48,8 @@ var *name* : *type* ;
 
 `[public] [impure] func` *name* ( *argname1: type1, argname2: type2, ...* ) [-> *returntype] codeblock*
 
+`[public] [impure] func` *name* ( *argname1: type1, argname2: type2, ...* ) `noreturn` codeblock*
+
 > This declares a function and provides its code.
 >
 > The `public` modifier is optional.  It indicates that the function can be called by code outside this source code file. Non-public functions cannot be called directly by outside code.  (However, pointers to non-public functions can be passed to outside code, and this would allow the pointed-to function to be called by outside code.)
@@ -59,6 +61,10 @@ var *name* : *type* ;
 > If there is a `returntype`, the function will return a single value of the specified type. (We'll see below that the type can be a tuple, allowing multiple values to be packaged together into a single return value.)
 >
 > If there is a `returntype`, the compiler must be able to infer that execution cannot reach the end of *codeblock* (so that the function terminates via a `return` statement, or the function runs forever). If the compiler is unable to verify this, it will generate an error.
+>
+> If `returntype` is `every`, then the function cannot return, because no return value can exist. The compiler will verify that the function cannot return. If the compiler is unable to verify this, it will generate an error.
+>
+> Declaring a function as `noreturn` is equivalent to declaring that the function returns `every`.  
 
 ## Types
 
@@ -102,6 +108,10 @@ Mini has the following types:
 
 > a hash map, which maps keys of one type to values of another type
 
+`union<` *type1*, *type2*, ... `>`
+
+> an untagged union type that can hold values from any of *type1*, *type2*, etc. There must be explicit casts to convert to and from its component types. This is done via `newunion` and `unioncast`.
+
 `struct` { *name1: type1 , name2 : type2 , ...* }
 
 > a struct with one or more named, typed fields (a compound type)
@@ -117,6 +127,10 @@ Mini has the following types:
 `any`
 
 > a value of unknown type
+
+`every`
+
+> a type that has no values, so that no value of this type can ever exist
 
 ## Equality and assignability for types
 
@@ -140,6 +154,8 @@ Two option types are equal if their inner types are equal
 
 `any` equals itself.
 
+`every` equals itself.
+
 Each imported type equals itself.
 
 Unless specified as equal by the rules above, a pair of types is unequal.
@@ -148,7 +164,7 @@ Unless specified as equal by the rules above, a pair of types is unequal.
 
 A value of type `V` is assignable to storage of type `S` if:
 
-* `S` is `anytype`, or
+* `S` is `any`, or
 * `V` equals `S`,
 * `V` and `S` are tuple types with the same number of fields, and each field of `V` is assignable to the corresponding field of `S`,
 * `V` and `S` are fixed-size arrays of the same size, and the field type of `V` is assignable to the field type of `S`,
@@ -161,6 +177,48 @@ A value of type `V` is assignable to storage of type `S` if:
 These rules guarantee that assignability is transitive. 
 
 The compiler uses often uses type inference to infer the types of variables from the types of values assigned to them.  If a programmer wants the compiler to infer a different type, they should use an explicit type-casting operation to convert the value to the desired type.
+
+## Castability
+
+A value of type `V` is castable to storage of type `S` if:
+
+* `S` is `any`, or
+* `V` equals `S`,
+* `V` is `bool` and `S` is one of `bool`, `address`, `bytes32`, `uint`, or `int`
+* `V` is `adress` and `S` is one of `address`, `bytes32`, `uint`, or `int`
+* `V` is one of `bytes32`, `uint`, or `int` and `S` is one of `bytes32`, `uint`, or `int`
+* `V` and `S` are tuple types with the same number of fields, and each field of `V` is castable to the corresponding field of `S`,
+* `V` and `S` are fixed-size arrays of the same size, and the field type of `V` is castable to the field type of `S`,
+* `V` and `S` are arrays, and the field type of `V` is castable to the field type of `S`,
+* `V` and `S` are structs, with the same number of fields, and each field of `V` is castable to the corresponding field of `S`,
+* `V` and `S` are function types, with the same number of arguments, and either `S` is impure or `V` is not impure, and each argument type of `V` is castable to the corresponding argument type of `S`, and either (a) both `S` and `V` return void, or (b) the return type of `S` is castable to the return type of `V`.  (Note that the return type is compared for castability "backwards". This is needed to make calls through function references type-safe.)
+* `V` and `S` are map types, and the key type of `V` is castable to the key type of `S`, and the value type of `V` is castable to the value type of `S`.
+* `V` and `S` are optional types, and the inner type of `V` is castable to the inner type of `S`
+
+## Covariant Cast
+
+A value of type `V` can be `covariantcast` to storage of type `S` if 
+there is a constructable type `T` such that `T`
+is castable to both `V` and `S`.
+
+A constructable type is a type for which it is possible to create a value.
+Non-constructable types include `void`, `every` and `(uint, every)`.
+
+In practical terms this means:
+
+A value of type `V` is `covariantcast`able to storage of type `S` if:
+
+* `V` is any, or
+* `S` is `any`,
+* `V` equals `S`,
+* both `V` and `S` are one of `bool`, `address`, `bytes32`, `uint`, or `int`
+* `V` and `S` are tuple types with the same number of fields, and each field of `V` is covariant castable to the corresponding field of `S`,
+* `V` and `S` are fixed-size arrays of the same size, and the field type of `V` is covariant castable to the field type of `S`,
+* `V` and `S` are arrays, and the field type of `V` is covariant castable to the field type of `S`,
+* `V` and `S` are structs, with the same number of fields, and each field of `V` is covariant castable to the corresponding field of `S`,
+* `V` and `S` are function types, with the same number of arguments, and each argument type of `V` is covariant castable to the corresponding argument type of `S`, and either (a) both `S` and `V` return void, or (b) the return type of `S` is covariant castable to the return type of `V`.
+* `V` and `S` are map types, and the key type of `V` is covariant castable to the key type of `S`, and the value types of `V` and `S` are covariant castable.
+* `V` and `S` are optional types
 
 ## Values
 
@@ -212,9 +270,17 @@ Values of type `anytype` do not have any representation that is understood by th
 
 > Create a new local variable and initialize it with the value of *expression*.  The compiler infers that the new variable has the same type as *expression* .  The variable goes out of scope when execution leaves the current codeblock.  If the new variable has the same name as an already-existing variable, it will mask the existing variable definition for as long as the new variable is in scope.
 
-`let` ( *name1* , *name2*, ... ) = *expression* ;
+`let` ( *nameorbinding1* , *nameorbinding2*, ... ) = *expression* ;
 
-> Create multiple new variables based on unpacking a tuple. *expression* must be a tuple type, with the number of fields in the tuple equal to the number of names on the left-hand side.  The compiler creates a new local variable for each name on the left-hand side, and infers the type of each new variable based on the type of the corresponding field of the right-hand side tuple.
+> Where each nameorbinding may be:
+
+*identifier*
+
+> Or
+
+**identifier*
+
+> Creates or assigns to multiple variables based on unpacking a tuple. If the *nameorbinding* is an identifier it creates a new variable, if *nameorbinding* is **identifier* it assigns to an existing variable with that name.  *expression* must be a tuple type, with the number of fields in the tuple equal to the number of names on the left-hand side.  The compiler creates a new local variable for each name on the left-hand side, and infers the type of each new variable based on the type of the corresponding field of the right-hand side tuple.
 >
 > [Potential improvement: Allow left-hand side names to be replaced by `_`, allowing unneeded components to be discarded without creating a variable.]
 >
@@ -233,6 +299,18 @@ Values of type `anytype` do not have any representation that is understood by th
 *name* = *expression* ;
 
 > Assign a new value to an existing variable, which can be a global variable or a local variable. The type of *expression* must be assignable to the variable's type.
+
+`set` *name* ( .*field1*, .*field2*, ... ) = *expression* ;
+
+> Assign to an existing variable a copy of its current value with the indicated field set to *expression*. The type of *expression* must be assignable to the field's type.
+
+`set` *name* [ *indexExpression* ] = *expression;
+
+> Assign to an existing variable a copy of its current value with the indicated array field value for index *indexExpression* set to *expression*. The access is bounds-checked, and will panic at runtime if the index is outside the bounds of the array. The type of *expression* must be assignable within the array.
+
+`set` *name* [ *keyExpression* ] = *expression;
+
+> Assign to an existing variable a copy of its current value with the indicated map field value for key *keyExpression* set to *expression*. The key is added rather than modified if it did not exist in the original map. The type of *expression* must be assignable within the map.
 
 `return` ;
 
@@ -374,6 +452,10 @@ Mini never automatically converts types to make an operation succeed.  Programme
 
 > Create a new map object, initially empty.
 
+`unioncast<` *type* `>(` *expression* `)`
+
+> Converts from a type of `union<`*type1*, *type2*,...`>` to *type*, where *type* must be a member of *type1*, *type2*,.... This is an unsafe operation, as which type the union contains is not checked. 
+
 `unsafecast` < *type* > ( *expression*  )
 
 > Evaluate *expression*, and then treat the in-memory representation of the result as an object having type *type*. This is an unsafe operation.  It is most often used to convert a value of type `any` into a more specific type, when the programmer knows the real type of the value.  
@@ -385,6 +467,10 @@ Mini never automatically converts types to make an operation succeed.  Programme
 `None`<*type*>
 
 > Creates an optional value of type option<*type*> with no inner value 
+
+`newunion<` *type1*, *type2*, ... `>(` *expression* `)`
+
+> Creates a value of type `union<*type1*, *type2*, ... >` from an *expression* of any of *type1* *type2*
 
 *arrExpression* [ *indexExpression* ]
 

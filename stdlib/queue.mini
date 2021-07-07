@@ -70,7 +70,7 @@ public func boundedQueue_set_nth(q: BoundedQueue, n: uint, value: any) -> option
 
 public func boundedQueue_expand(q: BoundedQueue, newSize: uint) -> BoundedQueue {
     if (newSize <= q.capacity) {
-        panic;
+        error;
     }
     let newQ = boundedQueue_new(newSize);
     while ( ! boundedQueue_isEmpty(q) ) {
@@ -78,7 +78,7 @@ public func boundedQueue_expand(q: BoundedQueue, newSize: uint) -> BoundedQueue 
             q = res.0;
             newQ = boundedQueue_put(newQ, res.1);
         } else {
-            panic;
+            error;
         }
     }
     return newQ;
@@ -113,7 +113,7 @@ public func queue_getOrDie(q: Queue) -> (Queue, any) {
     return xif let Some(res) = queue_get(q) {
         res
     } else {
-        panic
+        error
     };
 }
 
@@ -155,7 +155,7 @@ public func queuestack_push(qs: QueueStack, q: Queue) -> QueueStack {
 
 func queuestack_stripEmpties(qs: QueueStack) -> QueueStack {
     return xloop {
-        if let Some(cell) = unsafecast<option<QueueStackCell>>(qs) {   // cast is safe but compiler doesn't know that
+        if let Some(cell) = unsafecast<option<QueueStackCell> >(qs) {   // cast is safe but compiler doesn't know that
             if (queue_isEmpty(cell.head)) {
                 qs = cell.rest;
             } else {

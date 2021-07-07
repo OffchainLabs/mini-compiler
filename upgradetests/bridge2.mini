@@ -8,12 +8,12 @@ use impl2::set_newGlobal3_onUpgrade;
 
 type GlobalsBeforeUpgrade = struct {
     global1: uint,
-    global2: option<int>,
+    global2: option<int> ,
     _jump_table: any,
 }
 
 type GlobalsAfterUpgrade = struct {
-    newGlobal1: option<int>,
+    newGlobal1: option<int> ,
     newGlobal2: uint,
     newGlobal3: (uint, uint, ),
     _jump_table: any,
