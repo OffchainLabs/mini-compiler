@@ -1,208 +1,144 @@
 //
-// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+// Copyright 2020-2021, Offchain Labs, Inc. All rights reserved.
 //
 
-use arbowner::arbowner_init;
+use accounts::accounts_notifyParamsChanged;
+
+use core::kvs::Kvs;
+use core::kvs::builtin_kvsForall;
 
 use std::bytearray::ByteArray;
-use std::bytearray::bytearray_get256;
+use std::bytearray::bytearray_new;
+use std::bytearray::bytearray_size;
+use std::bytearray::bytearray_set256;
 
-use std::bytestream::ByteStream;
 use std::bytestream::bytestream_new;
-use std::bytestream::bytestream_get64;
 use std::bytestream::bytestream_get256;
-use std::bytestream::bytestream_skipBytes;
 
-use gasAccounting::gasAccounting_setChargingParams;
-use gasAccounting::gasAccounting_postInitMessage;
+use gasAccounting::gasAccounting_notifyParamsChanged;
 
 
-type ChainParams = struct {
-    chainId: uint,                   // chain ID
-    gracePeriodBlocks: uint,         // time validators are given to respond to an assertion
-    arbGasSpeedLimitPerSecond: uint, // assumed max speed of nodes tracking this chain's VM
-    maxExecutionSteps: uint,         // max number of steps in an assertion
-    baseStake: uint,                 // base stake of a validator, in wei
-    stakingToken: address,           // ERC-20 token used for staking; or zero if using ETH
-    owner: address,                  // owner of the chain, who has admin privileges (or zero if there is no owner)
-    secondsPerSend: option<uint>,    // issue at most one send per this many seconds
-    defaultAggregator: address,      // default aggregator, for users who haven't specified one
+var globalChainParameters: map<uint, uint>;
+
+public impure func chainParams_get(which: uint) -> option<uint> {
+    return globalChainParameters[which];
 }
 
-var globalChainParams: option<ChainParams>;
+public impure func chainParams_getOrDie(which: uint) -> uint {
+    return xif let Some(val) = chainParams_get(which) {
+        val
+    } else {
+        panic
+    };
+}
+
+public impure func chainParams_set(which: uint, value: uint) {
+    globalChainParameters = globalChainParameters with { [which] = value };
+}
 
 public impure func chainParams_init() {
-    globalChainParams = None<ChainParams>;
+    globalChainParameters = chainParams_getDefaults();
 }
 
-public impure func chainParams_gotParamsMessage(_sender: address, data: ByteArray) {
-    if (globalChainParams == None<ChainParams>) {
-        arbowner_init();
+public func chainParams_getDefaults() -> map<uint, uint> {
+    return newmap<uint, uint>
+        with { [const::Atom_Param_SecondsPerBlockNumerator] = const::Default_Param_SecondsPerBlockNumerator }
+        with { [const::Atom_Param_SecondsPerBlockDenominator] = const::Default_Param_SecondsPerBlockDenominator }
+        with { [const::Atom_Param_FeesEnabled] = const::Default_Param_FeesEnabled }
+        with { [const::Atom_Param_NetworkFeeRecipient] = const::Default_Param_NetworkFeeRecipient }
+        with { [const::Atom_Param_CongestionFeeRecipient] = const::Default_Param_CongestionFeeRecipient }
+        with { [const::Atom_Param_DefaultAggregator] = const::Default_Param_DefaultAggregator }
+        with { [const::Atom_Param_DefaultBaseTxFeeL1Gas] = const::Default_Param_DefaultBaseTxFeeL1Gas }
+        with { [const::Atom_Param_MinBaseTxFeeL1Gas] = const::Default_Param_MinBaseTxFeeL1Gas }
+        with { [const::Atom_Param_MaxBaseTxFeeL1Gas] = const::Default_Param_MaxBaseTxFeeL1Gas }
+        with { [const::Atom_Param_ChainID] = const::Default_Param_ChainID }
+        with { [const::Atom_Param_ChallengePeriodEthBlocks] = const::Default_Param_ChallengePeriodEthBlocks }
+        with { [const::Atom_Param_SpeedLimitPerSecond] = const::Default_Param_SpeedLimitPerSecond }
+        with { [const::Atom_Param_SecondsPerSend] = const::Default_Param_SecondsPerSend }
+        with { [const::Atom_Param_ChainOwner] = const::Default_Param_ChainOwner }
+        with { [const::Atom_Param_L1GasPerL1CalldataUnit] = const::Default_Param_L1GasPerL1CalldataUnit }
+        with { [const::Atom_Param_L1GasPerStorage] = const::Default_Param_L1GasPerStorage }
+        with { [const::Atom_Param_ArbGasDivisor] = const::Default_Param_ArbGasDivisor }
+        with { [const::Atom_Param_NetworkFeeShareNumerator] = const::Default_Param_NetworkFeeShareNumerator }
+        with { [const::Atom_Param_NetworkFeeShareDenominator] = const::Default_Param_NetworkFeeShareDenominator }
+        with { [const::Atom_Param_GasPoolMax] = const::Default_Param_GasPoolMax }
+        with { [const::Atom_Param_TxGasLimit] = const::Default_Param_TxGasLimit }
+        with { [const::Atom_Param_RetryablePriceBase] = const::Default_Param_RetryablePriceBase }
+        with { [const::Atom_Param_RetryablePricePerByteNumerator] = const::Default_Param_RetryablePricePerByteNumerator }
+        with { [const::Atom_Param_RetryablePricePerByteDenominator] = const::Default_Param_RetryablePricePerByteDenominator }
+        with { [const::Atom_Param_RetryableTxRepriceIntervalSeconds] = const::Default_Param_RetryableTxRepriceIntervalSeconds }
+        with { [const::Atom_Param_L1GasPriceEstimateWeightNumerator] = const::Default_Param_L1GasPriceEstimateWeightNumerator }
+        with { [const::Atom_Param_L1GasPriceEstimateWeightDenominator] = const::Default_Param_L1GasPriceEstimateWeightDenominator }
+        with { [const::Atom_Param_RetryableTxLifetimeSeconds] = const::Default_Param_RetryableTxLifetimeSeconds }
+        with { [const::Atom_Param_ArbitrumNonZeroBalanceCallStipend] = const::Default_Param_ArbitrumNonZeroBalanceCallStipend }
+    ;
+}
 
-        let arbGasSpeedLimitPerBlock = bytearray_get256(data, 32);
-        globalChainParams = Some(struct{
-            chainId: const::DefaultChainID,
-            gracePeriodBlocks: bytearray_get256(data, 0),
-            arbGasSpeedLimitPerSecond: blocksToSeconds(arbGasSpeedLimitPerBlock),
-            maxExecutionSteps: bytearray_get256(data, 2*32),
-            baseStake: bytearray_get256(data, 3*32),
-            stakingToken: address(bytearray_get256(data, 4*32)),
-            owner: address(bytearray_get256(data, 5*32)),
-            secondsPerSend: None<uint>,
-            defaultAggregator: address(0),
-        });
-
-        // now read and process initialization options
-        if let Some(stream) = bytestream_skipBytes(bytestream_new(data), 6*32) {
-            loop {
-                if let Some(ustr2) = doInitializationOption(stream) {
-                    stream = ustr2;
-                } else {
-                    return;
-                }
-            }
-        }
+public impure func chainParams_gotParamsMessage(data: ByteArray) {
+    let stream = bytestream_new(data);
+    loop {
+        let paramId = xif let Some(res) = bytestream_get256(stream) {
+            let (ustr, pid) = res;
+            stream = ustr;
+            pid
+        } else {
+            notifyParamsChanged();
+            return;
+            0
+        };
+        let value = xif let Some(res) = bytestream_get256(stream) {
+            let (ustr, val) = res;
+            stream = ustr;
+            val
+        } else {
+            notifyParamsChanged();
+            return;
+            0
+        };
+        chainParams_set(paramId, value);
     }
-
-    gasAccounting_postInitMessage();
 }
 
-impure func doInitializationOption(stream: ByteStream) -> option<ByteStream> {
-    // process one initialization option
-    // on success, return Some(updated stream)
-    // on end-of-stream, return None
-
-    let (ustr, optionId) = bytestream_get64(stream)?;
-    stream = ustr;
-    let (ustr, numPayloadBytes) = bytestream_get64(stream)?;
-    stream = ustr;
-    return xif (optionId == const::InitOption_setChargingParams) {
-        if (numPayloadBytes != 10*32) {
-            // unexpected payload size; discard the payload and ignore this option
-            return bytestream_skipBytes(stream, numPayloadBytes);
-        }
-        let (ustr, speedLimitPerSecond) = bytestream_get256(stream)?;
-        let (ustr, _l1GasPerL2Tx) = bytestream_get256(ustr)?;
-        let (ustr, _arbGasPerL2Tx) = bytestream_get256(ustr)?;
-        let (ustr, l1GasPerL2CalldataUnit) = bytestream_get256(ustr)?;
-        let (ustr, _arbGasPerL2CalldataUnit) = bytestream_get256(ustr)?;
-        let (ustr, l1GasPerStorage) = bytestream_get256(ustr)?;
-        let (ustr, _arbGasPerStorage) = bytestream_get256(ustr)?;
-        let (ustr, arbGasDivisor) = bytestream_get256(ustr)?;
-        let (ustr, netFeeRecipientU) = bytestream_get256(ustr)?;
-        let (ustr, congestionFeeRecipientU) = bytestream_get256(ustr)?;
-
-        if let Some(params) = globalChainParams {
-            globalChainParams = Some(params with {
-                arbGasSpeedLimitPerSecond: speedLimitPerSecond
-            });
-        }
-
-        gasAccounting_setChargingParams(
-            l1GasPerL2CalldataUnit,
-            l1GasPerStorage,
-            arbGasDivisor,
-            address(netFeeRecipientU),
-            address(congestionFeeRecipientU),
-        );
-        Some(ustr)
-    } elseif (optionId == const::InitOption_setDefaultAggregator) {
-        if (numPayloadBytes != 32) {
-            // unexpected payload size; discard the payload and ignore this option
-            return bytestream_skipBytes(stream, numPayloadBytes);
-        }
-        let (ustr, newDefaultAgg) = bytestream_get256(stream)?;
-        chainParams_setDefaultAggregator(address(newDefaultAgg));
-        Some(ustr)
-    } elseif (optionId == const::InitOption_setChainId) {
-        if (numPayloadBytes != 32) {
-            // unexpected payload size; discard the payload and ignore this option
-            return bytestream_skipBytes(stream, numPayloadBytes);
-        }
-        let (ustr, newChainId) = bytestream_get256(stream)?;
-        chainParams_setChainId(newChainId);
-        Some(ustr)
-    } else {
-        // unrecognized option, discard it
-        bytestream_skipBytes(stream, numPayloadBytes)
-    };
+public impure func notifyParamsChanged() {
+    gasAccounting_notifyParamsChanged();
+    accounts_notifyParamsChanged();
 }
 
 public impure func chainParams_chainId() -> uint {
-    return xif let Some(params) = globalChainParams {
-        params.chainId
-    } else {
-        const::DefaultChainID
-    };
+    return chainParams_getOrDie(const::Atom_Param_ChainID);
 }
 
-public impure func chainParams_setChainId(newChainId: uint) {
-    if let Some(params) = globalChainParams {
-        globalChainParams = Some(params with { chainId: newChainId });
-    }
-}
-
-public impure func chainParams_speedLimitPerSecond() -> uint {
-    return xif let Some(params) = globalChainParams {
-        params.arbGasSpeedLimitPerSecond
-    } else {
-        const::DefaultSpeedLimitPerSecond
-    };
-}
-
-public impure func chainParams_getOwner() -> option<address> {
-    return xif let Some(params) = globalChainParams {
-        Some(params.owner)
-    } else {
-        None<address>
-    };
-}
-
-public impure func chainParams_setOwner(newOwner: address) {
-    if let Some(params) = globalChainParams {
-        globalChainParams = Some(params with { owner: newOwner });
-    }
+public impure func chainParams_getOwner() -> address {
+    return address(chainParams_getOrDie(const::Atom_Param_ChainOwner));
 }
 
 public impure func chainParams_getDefaultAggregator() -> address {
-    return xif let Some(params) = globalChainParams {
-        params.defaultAggregator
-    } else {
-        address(0)
-    };
+    return address(chainParams_getOrDie(const::Atom_Param_DefaultAggregator));
 }
 
 public impure func chainParams_setDefaultAggregator(newDefault: address) {
-    if let Some(params) = globalChainParams {
-        globalChainParams = Some(params with { defaultAggregator: newDefault });
-    }
+    chainParams_set(const::Atom_Param_DefaultAggregator, uint(newDefault));
 }
 
 public impure func chainParams_getSecondsPerSend() -> uint {
-    return xif let Some(params) = globalChainParams {
-        xif let Some(bps) = params.secondsPerSend {
-            bps
-        } else {
-            blocksToSeconds(params.gracePeriodBlocks) / 3
-        }
-    } else {
-        const::DefaultSecondsPerSend
-    };
+    return chainParams_getOrDie(const::Atom_Param_SecondsPerSend);
 }
 
-public impure func chainParams_setSecondsPerSend(bps: uint) -> option<()> {
-    let sbps = None<uint>;
-    if (bps != 0) {           // interpret interval=0 as a request for the default behavior
-        sbps = Some(bps);
-    }
-    globalChainParams = Some(
-        (globalChainParams?) with {
-            secondsPerSend: sbps
-        }
+public impure func chainParams_serializeAllParams() -> ByteArray {
+    return unsafecast<ByteArray>(
+        builtin_kvsForall(
+            unsafecast<Kvs>(globalChainParameters),
+            unsafecast<func(any, any, any) -> any>(sapClosure),
+            bytearray_new(0),
+        )
     );
-    return Some(());
 }
 
-public func blocksToSeconds(numBlocks: uint) -> uint {
-    return numBlocks * const::SecondsPerBlockNumerator / const::SecondsPerBlockDenominator;
+func sapClosure(key: uint, value: uint, ba: ByteArray) -> ByteArray {
+    let sz = bytearray_size(ba);
+    return bytearray_set256(
+        bytearray_set256(ba, sz, key),
+        sz+32,
+        value,
+    );
 }

@@ -4,6 +4,7 @@
 
 use retrybuffer::RetryBuffer;
 use retrybuffer::retryBuffer_new;
+use retrybuffer::retryBuffer_setDefaultLifetime;
 
 use std::bytearray::ByteArray;
 use std::bytearray::bytearray_new;
@@ -24,6 +25,7 @@ use core::kvs::builtin_kvsForall;
 use core::kvs::builtin_kvsDelete;
 
 use chainParameters::chainParams_getDefaultAggregator;
+use chainParameters::chainParams_getOrDie;
 use codeSegment::translateEvmCodeSegment;
 use decompression::AggregatorDecompressionState;
 use evmCallStack::evmCallStack_addStorageCharge;
@@ -101,6 +103,12 @@ public func escrowStore_new() -> EscrowStore {
     return struct {
         nextKey: 1,     // key 0 is pre-reserved for escrowing the current tx's gas funds
         escrowedValues: storageMap_new(),
+    };
+}
+
+public impure func accounts_notifyParamsChanged() {
+    globalAccountStore = globalAccountStore with {
+        retryBuffer: retryBuffer_setDefaultLifetime(globalAccountStore.retryBuffer)
     };
 }
 
@@ -259,7 +267,7 @@ public func account_getAggregatorDecompressionState(account: Account) -> option<
     return (account.aggregatorInfo?).decompressionState;
 }
 
-public func account_setAggregatorDecompressionState(
+public impure func account_setAggregatorDecompressionState(
     account: Account,
     maybeState: option<AggregatorDecompressionState>,
 ) -> Account {
@@ -273,7 +281,7 @@ public func account_setAggregatorDecompressionState(
                 struct {
                     decompressionState: maybeState,
                     feeCollector: account.addr,
-                    baseTxFeeL1Gas: const::Charging_DefaultBaseTxFeeL1Gas,
+                    baseTxFeeL1Gas: chainParams_getOrDie(const::Atom_Param_DefaultBaseTxFeeL1Gas),
                 }
             }
         )
@@ -292,7 +300,7 @@ public func account_getFeeCollector(account: Account) -> address {
     };
 }
 
-public func account_setFeeCollector(account: Account, newCollector: address) -> Account {
+public impure func account_setFeeCollector(account: Account, newCollector: address) -> Account {
     return account with {
         aggregatorInfo: Some(
             xif let Some(aggInfo) = account.aggregatorInfo {
@@ -303,7 +311,7 @@ public func account_setFeeCollector(account: Account, newCollector: address) -> 
                 struct {
                     decompressionState: None<AggregatorDecompressionState>,
                     feeCollector: newCollector,
-                    baseTxFeeL1Gas: const::Charging_DefaultBaseTxFeeL1Gas,
+                    baseTxFeeL1Gas: chainParams_getOrDie(const::Atom_Param_DefaultBaseTxFeeL1Gas),
                 }
             }
         )

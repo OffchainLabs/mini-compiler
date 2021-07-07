@@ -13,6 +13,8 @@ use accounts::accountStore_newEscrow;
 use accounts::accountStore_payFromEscrow;
 use accounts::account_addToEthBalance;
 
+use chainParameters::chainParams_getOrDie;
+
 use evmCallStack::evmCallStack_isEmpty;
 use evmCallStack::getRetryBufferInCurrentContext;
 use evmCallStack::setRetryBufferInCurrentContext;
@@ -89,12 +91,24 @@ type RetryBuffer = struct {
     txLifetimeSeconds: uint
 }
 
-public func retryBuffer_new() -> RetryBuffer {
+public impure func retryBuffer_new() -> RetryBuffer {
     return struct {
         byTxId: newmap<uint, RetryableTx>,
         fifo: queue_new(),
-        txLifetimeSeconds: const::RetryBuffer_DefaultLifetimeSeconds,
+        txLifetimeSeconds: chainParams_getOrDie(const::Atom_Param_RetryableTxLifetimeSeconds),
     };
+}
+
+public func retryBuffer_getLifetime(rbuf: RetryBuffer) -> uint {
+    return rbuf.txLifetimeSeconds;
+}
+
+public func retryBuffer_setLifetime(rbuf: RetryBuffer, newLifetime: uint) -> RetryBuffer {
+    return rbuf with { txLifetimeSeconds: newLifetime };
+}
+
+public impure func retryBuffer_setDefaultLifetime(rbuf: RetryBuffer) -> RetryBuffer {
+    return retryBuffer_setLifetime(rbuf, chainParams_getOrDie(const::Atom_Param_RetryableTxLifetimeSeconds));
 }
 
 // We trim the buffer when it's modified. This removes aged-out items from the buffer.

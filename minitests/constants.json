@@ -9,5 +9,8 @@
     "contract_folder": "contracts/artifacts/arbos/builtin",
     "contract": [
         
-    ]
+    ],
+    "parameters_int": { },
+    "parameters_hex": { }
+
 }

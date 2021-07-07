@@ -3,6 +3,7 @@ use crate::compile::miniconstants::init_constant_table;
 use crate::run::{load_from_file, Machine, RuntimeEnvironment};
 use crate::uint256::Uint256;
 use crate::upload::CodeUploader;
+use ethers_core::utils::keccak256;
 use ethers_signers::{Signer, Wallet};
 use std::path::Path;
 
@@ -75,16 +76,25 @@ impl<'a> _ArbOwner<'a> {
         }
     }
 
-    pub fn _give_ownership(
+    pub fn _set_chain_parameter(
         &self,
         machine: &mut Machine,
-        new_owner: Uint256,
-        old_owner: Option<Uint256>,
+        param_name: &str,
+        value: Uint256,
+        force_owner: bool, // force the message to come from address zero, which is an owner
     ) -> Result<(), ethabi::Error> {
+        let param_id = _param_id_from_name(param_name);
         let (receipts, _sends) = self.contract_abi.call_function(
-            old_owner.unwrap_or(self.my_address.clone()),
-            "giveOwnership",
-            &[ethabi::Token::Address(new_owner.to_h160())],
+            if force_owner {
+                Uint256::zero()
+            } else {
+                Uint256::from_u64(42894528) // any old address
+            },
+            "setChainParameter",
+            &[
+                ethabi::Token::Uint(param_id.to_u256()),
+                ethabi::Token::Uint(value.to_u256()),
+            ],
             machine,
             Uint256::zero(),
             self.debug,
@@ -102,6 +112,70 @@ impl<'a> _ArbOwner<'a> {
                 receipts[0]._get_return_code_text()
             )))
         }
+    }
+
+    pub fn _get_chain_parameter(
+        &self,
+        machine: &mut Machine,
+        param_name: &str,
+        force_owner: bool, // force the message to come from address zero, which is an owner
+    ) -> Result<Uint256, ethabi::Error> {
+        let param_id = _param_id_from_name(param_name);
+        let (receipts, _sends) = self.contract_abi.call_function(
+            if force_owner {
+                Uint256::zero()
+            } else {
+                Uint256::from_u64(980509782534089) // any old address
+            },
+            "getChainParameter",
+            &[ethabi::Token::Uint(param_id.to_u256())],
+            machine,
+            Uint256::zero(),
+            false,
+        )?;
+        let num_logs_before = machine.runtime_env.get_all_receipt_logs().len();
+        let num_sends_before = machine.runtime_env.get_all_sends().len();
+        let _arbgas_used = if self.debug {
+            machine.debug(None)
+        } else {
+            machine.run(None)
+        };
+        let logs = machine.runtime_env.get_all_receipt_logs();
+        let sends = machine.runtime_env.get_all_sends();
+
+        if (logs.len() != num_logs_before + 2) || (sends.len() != num_sends_before) {
+            return Err(ethabi::Error::from("wrong number of receipts or sends"));
+        }
+
+        if receipts[0].succeeded() {
+            Ok(Uint256::from_bytes(&receipts[0].get_return_data()))
+        } else {
+            Err(ethabi::Error::from(format!(
+                "tx failed: {}",
+                receipts[0]._get_return_code_text()
+            )))
+        }
+    }
+
+    pub fn _set_gas_accounting_params(
+        &self,
+        machine: &mut Machine,
+        speed_limit: Uint256,
+        gas_pool_max: Uint256,
+        tx_gas_limit: Uint256,
+    ) -> Result<(), ethabi::Error> {
+        self._set_chain_parameter(machine, "SpeedLimitPerSecond", speed_limit, true)?;
+        self._set_chain_parameter(machine, "GasPoolMax", gas_pool_max, true)?;
+        self._set_chain_parameter(machine, "TxGasLimit", tx_gas_limit, true)
+    }
+
+    pub fn _give_ownership(
+        &self,
+        machine: &mut Machine,
+        new_owner: Uint256,
+        force_owner: bool,
+    ) -> Result<(), ethabi::Error> {
+        self._set_chain_parameter(machine, "ChainOwner", new_owner, force_owner)
     }
 
     pub fn _add_to_reserve_funds(
@@ -135,31 +209,16 @@ impl<'a> _ArbOwner<'a> {
         enabled: bool,
         force_owner: bool, // force the message to come from address zero, which is an owner
     ) -> Result<(), ethabi::Error> {
-        let (receipts, _sends) = self.contract_abi.call_function(
-            if force_owner {
-                Uint256::zero()
-            } else {
-                self.my_address.clone()
-            },
-            "setFeesEnabled",
-            &[ethabi::Token::Bool(enabled)],
+        self._set_chain_parameter(
             machine,
-            Uint256::zero(),
-            self.debug,
-        )?;
-
-        if receipts.len() != 1 {
-            return Err(ethabi::Error::from("wrong number of receipts"));
-        }
-
-        if receipts[0].succeeded() {
-            Ok(())
-        } else {
-            Err(ethabi::Error::from(format!(
-                "tx failed: {}",
-                receipts[0]._get_return_code_text()
-            )))
-        }
+            "FeesEnabled",
+            if enabled {
+                Uint256::one()
+            } else {
+                Uint256::zero()
+            },
+            force_owner,
+        )
     }
 
     pub fn _get_fee_recipients(
@@ -231,55 +290,7 @@ impl<'a> _ArbOwner<'a> {
         machine: &mut Machine,
         seconds_per_send: Uint256,
     ) -> Result<(), ethabi::Error> {
-        let (receipts, _sends) = self.contract_abi.call_function(
-            self.my_address.clone(),
-            "setSecondsPerSend",
-            &[ethabi::Token::Uint(seconds_per_send.to_u256())],
-            machine,
-            Uint256::zero(),
-            self.debug,
-        )?;
-
-        if receipts.len() != 1 {
-            return Err(ethabi::Error::from("wrong number of receipts"));
-        }
-
-        if receipts[0].succeeded() {
-            Ok(())
-        } else {
-            Err(ethabi::Error::from("reverted"))
-        }
-    }
-
-    pub fn _set_gas_accounting_params(
-        &self,
-        machine: &mut Machine,
-        speed_limit: Uint256,
-        gas_pool_max: Uint256,
-        tx_gas_limit: Uint256,
-    ) -> Result<(), ethabi::Error> {
-        let (receipts, _sends) = self.contract_abi.call_function(
-            self.my_address.clone(),
-            "setGasAccountingParams",
-            &[
-                ethabi::Token::Uint(speed_limit.to_u256()),
-                ethabi::Token::Uint(gas_pool_max.to_u256()),
-                ethabi::Token::Uint(tx_gas_limit.to_u256()),
-            ],
-            machine,
-            Uint256::zero(),
-            self.debug,
-        )?;
-
-        if receipts.len() != 1 {
-            return Err(ethabi::Error::from("wrong number of receipts"));
-        }
-
-        if receipts[0].succeeded() {
-            Ok(())
-        } else {
-            Err(ethabi::Error::from("reverted"))
-        }
+        self._set_chain_parameter(machine, "SecondsPerSend", seconds_per_send, true)
     }
 
     pub fn _change_sequencer(
@@ -722,6 +733,10 @@ impl<'a> _ArbOwner<'a> {
             )))
         }
     }
+}
+
+fn _param_id_from_name(name: &str) -> Uint256 {
+    Uint256::from_bytes(&keccak256(name.as_bytes()))
 }
 
 pub struct _ArbGasInfo<'a> {
@@ -1444,7 +1459,7 @@ fn _test_upgrade_arbos_over_itself_impl() -> Result<(), ethabi::Error> {
         Uint256::from_u64(33),
     );
 
-    arbowner._give_ownership(&mut machine, my_addr, Some(Uint256::zero()))?;
+    arbowner._give_ownership(&mut machine, my_addr, true)?;
 
     let mexe_path = Path::new("arb_os/arbos-upgrade.mexe");
     let _previous_upgrade_hash = _try_upgrade(&arbowner, &mut machine, &mexe_path, None)?.unwrap();
@@ -1644,7 +1659,7 @@ pub fn _evm_test_arbowner(log_to: Option<&Path>, debug: bool) -> Result<(), etha
 
     let arbowner = _ArbOwner::_new(&wallet, debug);
 
-    arbowner._give_ownership(&mut machine, my_addr, Some(Uint256::zero()))?;
+    arbowner._give_ownership(&mut machine, my_addr, true)?;
 
     arbowner._start_code_upload(&mut machine)?;
 
@@ -1914,7 +1929,7 @@ pub fn _evm_test_rate_control(log_to: Option<&Path>, debug: bool) -> Result<(), 
     let my_addr = Uint256::from_bytes(wallet.address().as_bytes());
     let arbowner = _ArbOwner::_new(&wallet, debug);
 
-    arbowner._give_ownership(&mut machine, my_addr, Some(Uint256::zero()))?;
+    arbowner._give_ownership(&mut machine, my_addr, true)?;
 
     let const_table = init_constant_table(Some(Path::new("arb_os/constants.json"))).unwrap();
 
@@ -1956,7 +1971,7 @@ pub fn _do_rollup_tracker_ops() {
     let owner = Uint256::from_bytes(wallet.address().as_bytes());
     let arbowner = _ArbOwner::_new(&wallet, false);
     arbowner
-        ._give_ownership(&mut machine, owner.clone(), Some(Uint256::zero()))
+        ._give_ownership(&mut machine, owner.clone(), true)
         .unwrap();
 
     let my_addr = Uint256::from_u64(11025);

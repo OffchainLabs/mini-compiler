@@ -12,6 +12,7 @@ use accounts::accountStore_upgradeContractFromEvmCode;
 use accounts::account_checkAndIncrSeqNum;
 
 use arbstatistics::arbStatistics_init;
+use arbowner::arbowner_init;
 
 use blockhash::blockhash_init;
 
@@ -83,11 +84,11 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
     } else {
         // this is a clean start, not an upgrade
         errorHandler_init();
+        chainParams_init();
         arbStatistics_init();
 
         pluggables_init();
         codeSegment_init();
-        chainParams_init();
         output_init();
         decompression_init();
         inbox_init();
@@ -98,6 +99,7 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
         blockhash_init();
         inbox_init();
         accountStore_init();
+        arbowner_init();
         txReceipts_init();
         if (initializePreinstalls(false) == None<()>) {
             panic;   // don't try to run without preinstalls and precompiles

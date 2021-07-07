@@ -3,6 +3,7 @@
 //
 
 use bridge_arbos_versions::GlobalsBeforeUpgrade;
+
 use bridge_arbos_versions::before__accounts_Account;
 
 use accounts::Account;
@@ -20,12 +21,100 @@ use std::addressSet::setOfAddresses_all;
 use core::kvs::Kvs;
 use core::kvs::builtin_kvsForall;
 
-public func set_globalCallStack_onUpgrade(_input_globals: GlobalsBeforeUpgrade) -> option<EvmCallFrame> {
+
+public func set_globalCallStack_onUpgrade(_oldGlobals: GlobalsBeforeUpgrade) -> option<EvmCallFrame> {
     return None<EvmCallFrame>;
 }
 
-func _dummy() -> uint {
-    return 0;
+public func set_gasAccountingInfo_onUpgrade(oldGlobals: GlobalsBeforeUpgrade) -> GasAccountingInfo {
+    let oldInfo = oldGlobals.gasAccountingInfo;
+    let oldPP = oldInfo.pricingParams;
+    return struct {
+        txState: oldInfo.txState,
+        feeConfig: struct {
+            baseFeeMultiplier: oldInfo.feeConfig.baseFeeMultiplier,
+            shareForNetFee: oldInfo.feeConfig.shareForNetFee,
+        },
+        currentPrices: struct {
+            perL1CalldataUnit: oldInfo.currentPrices.perL1CalldataUnit,
+            perStorageCell: oldInfo.currentPrices.perStorageCell,
+            perArbGasBase: oldInfo.currentPrices.perArbGasBase,
+            perArbGasCongestion: oldInfo.currentPrices.perArbGasCongestion,
+            perArbGasTotal: oldInfo.currentPrices.perArbGasTotal,
+        },
+        gasRemainingThisBlock: oldInfo.gasRemainingThisBlock,
+        congestionState: oldInfo.congestionState,
+        speedLimitPerSecond: oldInfo.speedLimitPerSecond,
+        pricingParams: struct {
+            l1GasPerL1CalldataUnit: oldPP.l1GasPerL1CalldataUnit,
+            l1GasPerStorage: oldPP.l1GasPerStorage,
+            arbGasDivisor: oldPP.arbGasDivisor,
+        },
+        gasAllocatedToThisBlock: oldInfo.gasAllocatedToThisBlock,
+        retryablePrices: oldInfo.retryablePrices,
+        allowedSenders: oldInfo.allowedSenders,
+    };
+}
+
+public func set_globalChainParameters_onUpgrade(oldGlobals: GlobalsBeforeUpgrade) -> map<uint, uint> {
+    let oldChainParams = xif let Some(cp) = oldGlobals.globalChainParams {
+        cp
+    } else {
+        struct {
+            chainId: const::Default_Param_ChainID,
+            gracePeriodBlocks: const::Default_Param_ChallengePeriodEthBlocks,
+            arbGasSpeedLimitPerSecond: const::Default_Param_SpeedLimitPerSecond,
+            maxExecutionSteps: 1000000000000,  // never used
+            baseStake: 5000000000,             // never used
+            stakingToken: address(0),          // ETH
+            owner: address(0),
+            secondsPerSend: None<uint>,
+            defaultAggregator: address(const::Default_Param_DefaultAggregator),
+        }
+    };
+
+    return newmap<uint, uint>
+        with { [const::Atom_Param_SecondsPerBlockNumerator] = const::Default_Param_SecondsPerBlockNumerator }
+        with { [const::Atom_Param_SecondsPerBlockDenominator] = const::Default_Param_SecondsPerBlockDenominator }
+        with { [const::Atom_Param_FeesEnabled] = xif (oldGlobals.gasAccountingInfo.feeConfig.enabled) { 1 } else { 0 } }
+        with { [const::Atom_Param_NetworkFeeRecipient] = uint(oldGlobals.gasAccountingInfo.feeConfig.forNetwork) }
+        with { [const::Atom_Param_CongestionFeeRecipient] = uint(oldGlobals.gasAccountingInfo.feeConfig.forCongestion) }
+        with { [const::Atom_Param_DefaultAggregator] = uint(oldChainParams.defaultAggregator) }
+        with { [const::Atom_Param_DefaultBaseTxFeeL1Gas] = const::Default_Param_DefaultBaseTxFeeL1Gas }
+        with { [const::Atom_Param_MinBaseTxFeeL1Gas] = const::Default_Param_MinBaseTxFeeL1Gas }
+        with { [const::Atom_Param_MaxBaseTxFeeL1Gas] = const::Default_Param_MaxBaseTxFeeL1Gas }
+        with { [const::Atom_Param_ChainID] = oldChainParams.chainId }
+        with { [const::Atom_Param_ChallengePeriodEthBlocks] = oldChainParams.gracePeriodBlocks }
+        with { [const::Atom_Param_SpeedLimitPerSecond] = oldGlobals.gasAccountingParams.SpeedLimitPerSecond }
+        with {
+            [const::Atom_Param_SecondsPerSend] = xif let Some(sps) = oldChainParams.secondsPerSend {
+                sps
+            } else {
+                const::Default_Param_SecondsPerSend
+            }
+        }
+        with { [const::Atom_Param_ChainOwner] = uint(oldChainParams.owner) }
+        with { [const::Atom_Param_L1GasPerL1CalldataUnit] = oldGlobals.gasAccountingInfo.pricingParams.l1GasPerL1CalldataUnit }
+        with { [const::Atom_Param_L1GasPerStorage] = oldGlobals.gasAccountingInfo.pricingParams.l1GasPerStorage }
+        with { [const::Atom_Param_ArbGasDivisor] = oldGlobals.gasAccountingInfo.pricingParams.arbGasDivisor }
+        with {
+            [const::Atom_Param_NetworkFeeShareNumerator] = {
+                let bfm = oldGlobals.gasAccountingInfo.feeConfig.baseFeeMultiplier;
+                bfm.val - bfm.shiftFactor
+            }
+        }
+        with { [const::Atom_Param_NetworkFeeShareDenominator] = oldGlobals.gasAccountingInfo.feeConfig.baseFeeMultiplier.shiftFactor }
+        with { [const::Atom_Param_GasPoolMax] = oldGlobals.gasAccountingParams.GasPoolMax }
+        with { [const::Atom_Param_TxGasLimit] = oldGlobals.gasAccountingParams.TxGasLimit }
+        with { [const::Atom_Param_RetryablePriceBase] = const::Default_Param_RetryablePriceBase }
+        with { [const::Atom_Param_RetryablePricePerByteNumerator] = const::Default_Param_RetryablePricePerByteNumerator }
+        with { [const::Atom_Param_RetryablePricePerByteDenominator] = const::Default_Param_RetryablePricePerByteDenominator }
+        with { [const::Atom_Param_RetryableTxRepriceIntervalSeconds] = const::Default_Param_RetryableTxRepriceIntervalSeconds }
+        with { [const::Atom_Param_L1GasPriceEstimateWeightNumerator] = const::Default_Param_L1GasPriceEstimateWeightNumerator }
+        with { [const::Atom_Param_L1GasPriceEstimateWeightDenominator] = const::Default_Param_L1GasPriceEstimateWeightDenominator }
+        with { [const::Atom_Param_RetryableTxLifetimeSeconds] = const::Default_Param_RetryableTxLifetimeSeconds }
+        with { [const::Atom_Param_ArbitrumNonZeroBalanceCallStipend] = const::Default_Param_ArbitrumNonZeroBalanceCallStipend }
+    ;
 }
 
 public func set_globalAccountStore_onUpgrade(oldGlobals: GlobalsBeforeUpgrade) -> AccountStore {
@@ -56,7 +145,7 @@ func acctRemapClosure(_addr: address, oldAcct: before__accounts_Account, state: 
                 struct {
                     decompressionState: aggInfo.decompressionState,
                     feeCollector: aggInfo.feeCollector,
-                    baseTxFeeL1Gas: const::Charging_DefaultBaseTxFeeL1Gas,
+                    baseTxFeeL1Gas: const::Default_Param_DefaultBaseTxFeeL1Gas,
                 }
             )
         } else {
@@ -74,10 +163,8 @@ public func set_gasAccountingInfo_onUpgrade(input_globals: GlobalsBeforeUpgrade)
     return struct {
         txState: old.txState,
         feeConfig: struct {
-            enabled: old.feeConfig.enabled,
-            forNetwork: old.feeConfig.forNetwork,
-            forCongestion: old.feeConfig.forCongestion,
-            networkFeeRate: fixedPoint_new(
+            baseFeeMultiplier: old.feeConfig.baseFeeMultiplier,
+            shareForNetFee: fixedPoint_new(
                 old.feeConfig.baseFeeMultiplier.val,
                 old.feeConfig.baseFeeMultiplier.shiftFactor - old.feeConfig.baseFeeMultiplier.val
             ),

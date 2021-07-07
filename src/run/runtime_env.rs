@@ -19,7 +19,6 @@ use std::{collections::HashMap, fs::File, io, path::Path};
 #[derive(Debug, Clone)]
 pub struct RuntimeEnvironment {
     pub chain_id: u64,
-    pub chain_address: Uint256,
     pub l1_inbox: Vec<Value>,
     pub current_block_num: Uint256,
     pub current_timestamp: Uint256,
@@ -36,12 +35,8 @@ pub struct RuntimeEnvironment {
 }
 
 impl RuntimeEnvironment {
-    pub fn new(
-        chain_address: Uint256,
-        charging_policy: Option<(Uint256, Uint256, Uint256)>,
-    ) -> Self {
+    pub fn new(charging_policy: Option<(Uint256, Uint256, Uint256)>) -> Self {
         RuntimeEnvironment::new_with_blocknum_timestamp(
-            chain_address,
             Uint256::from_u64(100_000),
             Uint256::from_u64(10_000_000),
             charging_policy,
@@ -49,9 +44,8 @@ impl RuntimeEnvironment {
         )
     }
 
-    pub fn _new_options(chain_address: Uint256) -> Self {
+    pub fn _new_options() -> Self {
         RuntimeEnvironment::new_with_blocknum_timestamp(
-            chain_address,
             Uint256::from_u64(100_000),
             Uint256::from_u64(10_000_000),
             None,
@@ -59,9 +53,8 @@ impl RuntimeEnvironment {
         )
     }
 
-    pub fn _new_with_owner(chain_address: Uint256, owner: Option<Uint256>) -> Self {
+    pub fn _new_with_owner(owner: Option<Uint256>) -> Self {
         RuntimeEnvironment::new_with_blocknum_timestamp(
-            chain_address,
             Uint256::from_u64(100_000),
             Uint256::from_u64(10_000_000),
             None,
@@ -70,15 +63,14 @@ impl RuntimeEnvironment {
     }
 
     pub fn new_with_blocknum_timestamp(
-        chain_address: Uint256,
         blocknum: Uint256,
         timestamp: Uint256,
         charging_policy: Option<(Uint256, Uint256, Uint256)>,
         owner: Option<Uint256>,
     ) -> Self {
+        let chain_id = 42161;
         let mut ret = RuntimeEnvironment {
-            chain_id: 42161,
-            chain_address,
+            chain_id,
             l1_inbox: vec![],
             current_block_num: blocknum,
             current_timestamp: timestamp,
@@ -91,7 +83,7 @@ impl RuntimeEnvironment {
             compressor: TxCompressor::new(),
             charging_policy: charging_policy.clone(),
             num_wallets: 0,
-            chain_init_message: RuntimeEnvironment::get_params_bytes(charging_policy, owner),
+            chain_init_message: RuntimeEnvironment::get_params_bytes(owner, chain_id),
         };
 
         ret.send_chain_init_message();
@@ -101,34 +93,23 @@ impl RuntimeEnvironment {
     pub fn send_chain_init_message(&mut self) {
         self.insert_l1_message(
             4,
-            self.chain_address.clone(),
+            Uint256::zero(),
             &self.chain_init_message.clone(),
             None,
             None,
         );
     }
 
-    fn get_params_bytes(
-        charging_policy: Option<(Uint256, Uint256, Uint256)>,
-        owner: Option<Uint256>,
-    ) -> Vec<u8> {
+    fn get_params_bytes(owner: Option<Uint256>, chain_id: u64) -> Vec<u8> {
         let mut buf = Vec::new();
-        buf.extend(Uint256::from_u64(3 * 60 * 60).to_bytes_be()); // grace period in blocks
-        buf.extend(Uint256::from_u64(100_000_000 / 1000).to_bytes_be()); // arbgas speed limit per tick
-        buf.extend(Uint256::from_u64(10_000_000_000).to_bytes_be()); // max execution steps
-        buf.extend(Uint256::from_u64(1000).to_bytes_be()); // base stake amount in wei
-        buf.extend(Uint256::zero().to_bytes_be()); // staking token address (zero means ETH)
-        buf.extend(owner.clone().unwrap_or(Uint256::zero()).to_bytes_be()); // owner address
-
-        if let Some((base_gas_price, storage_charge, pay_fees_to)) = charging_policy.clone() {
-            buf.extend(&[0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 2u8]); // option ID = 2
-            buf.extend(&[0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 96u8]); // option payload size = 96 bytes
-            buf.extend(base_gas_price.to_bytes_be());
-            buf.extend(storage_charge.to_bytes_be());
-            buf.extend(pay_fees_to.to_bytes_be());
+        let params_to_set = vec![
+            ("ChainOwner", owner.clone().unwrap_or(Uint256::zero())),
+            ("ChainID", Uint256::from_u64(chain_id)),
+        ];
+        for (name, val) in params_to_set {
+            buf.extend(&keccak256(name.as_bytes()));
+            buf.extend(val.to_bytes_be());
         }
-
-        buf.extend(owner.unwrap_or(Uint256::zero()).to_bytes_be()); // owner address
 
         buf
     }
@@ -597,7 +578,7 @@ impl RuntimeEnvironment {
 
 impl Default for RuntimeEnvironment {
     fn default() -> Self {
-        RuntimeEnvironment::new(Uint256::from_usize(1111), None)
+        RuntimeEnvironment::new(None)
     }
 }
 

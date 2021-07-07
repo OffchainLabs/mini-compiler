@@ -48,21 +48,11 @@ This message type is initiated by a client, via a transaction to the EthBridge. 
 
 Details of L2 message subtypes and formats are listed in a separate section below.
 
-##### Message type 4: chain initialization message
+##### Message type 4: set parameters message
 
 This message type is initiated by the EthBridge, as part of the creation of a new L2 chain, in order to convey parameters of the chain to ArbOS. It must only be sent as the first message in the inbox of a new chain.  
 
-Type-specific data:
-
-* challenge period, in seconds (uint)
-* ArbGas speed limit, in ArbGas per second (uint)
-* maximum number of execution steps allowed in an assertion (uint)
-* minimum stake requirement, in Wei (uint)
-* address of the staking token, or zero if staking in ETH (address encoded as uint)
-* address of the chain's owner (address encoded as uint)
-* option data
-
-Option data consists of a sequence of zero or more chunks.  ArbOS will ignore a chunk if it does not know how to handle that chunk's option ID.
+Type-specific data consists 
 
 Each chunk is:
 

@@ -22,7 +22,7 @@ COMPILEFLAGS = -c "arb_os/constants.json" -i "none"
 COMPILEFLAGSNOINLINE = -c "arb_os/constants.json"
 EXTRACOMPILEFLAGSFORARBOS = -m
 
-all: $(ARBOSCONTRACTS) $(TESTFILES) $(TESTCONTRACTS) $(TEMPLATES) $(UPGRADEFILES) arbos upgrade test
+all: $(ARBOSCONTRACTS) $(TESTFILES) $(TESTCONTRACTS) $(TEMPLATES) $(UPGRADEFILES) arbos upgrade paramslist test
 arbos: $(ARBOSDIR)/arbos.mexe
 upgrade: $(ARBOSDIR)/upgrade.json
 contracts: $(TESTCONTRACTS) $(ARBOSCONTRACTS)
@@ -126,6 +126,11 @@ $(TESTCONTRACTSPURE): $(TCSRCDIR)
 $(ARBOSCONTRACTS): $(ACSRCDIR)
 	(cd contracts; yarn install; yarn build)
 
+paramslist: parameters.json
+
+parameters.json: compiler $(ARBOSDIR)/constants.json
+	$(CARGORUN) make-parameters-list -c $(ARBOSDIR)/constants.json >parameters.json
+
 compiler:
 	cargo build --release
 
@@ -134,6 +139,8 @@ run: compiler
 
 test:
 	cargo test --release 
+
+evmtest: compiler $(ARBOS)
 
 evmtest: $(ARBOS)
 	$(CARGORUN) evm-tests
@@ -148,11 +155,14 @@ testlogs: compiler $(TEMPLATES) $(ARBOS)
 	mkdir testlogs
 	$(CARGORUN) make-test-logs >/dev/null
 
-evmdebug: all
+evmdebug: compiler all
 	$(CARGORUN) evm-debug
 
 benchmark: compiler $(TEMPLATES) $(ARBOS)
 	$(CARGORUN) make-benchmarks
+
+./target/release/mini: src/* src/*/*
+	cargo build --release
 
 clean:
 	rm -f $(BUILTINDIR)/*.mexe $(STDDIR)/*.mexe $(UPGRADETESTDIR)/*.mexe $(ARBOSDIR)/arbos.mexe $(ARBOSDIR)/arbos-upgrade.mexe $(ARBOSDIR)/upgrade.json minitests/*.mexe $(ARBOSDIR)/contractTemplates.mini

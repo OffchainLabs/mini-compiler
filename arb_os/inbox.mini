@@ -33,8 +33,6 @@ use messageBatch::messageBatch_get;
 
 use output::outputStats_endOfBlock;
 
-use pluggables::callPluggable;
-
 use retrybuffer::RetryableTx;
 use retrybuffer::processRetryableTx;
 
@@ -114,8 +112,10 @@ public impure func inbox_get() -> IncomingRequest {
             inboxHashAccumulator: hash(globalInbox.inboxHashAccumulator, ebMsgHash)
         };
 
-        if (ebMsg.kind == const::L1MessageType_chainInit) {
-            chainParams_gotParamsMessage(ebMsg.sender, ebMsg.msgData);
+        if (ebMsg.kind == const::L1MessageType_setChainParameters) {
+            if (ebMsg.sender == address(0)) {
+                chainParams_gotParamsMessage(ebMsg.msgData);
+            }   // ignore this message if it didn't come from chain owner
         } else {
             return ebMsg with {
                 requestId: uint(hash(bytes32(chainParams_chainId()), bytes32(ebMsg.requestId)))

@@ -31,6 +31,7 @@ use accounts::account_setContractInfo;
 use accounts::account_incrSeqNum;
 use accounts::account_getStorageSize;
 
+use chainParameters::chainParams_getOrDie;
 use codeSegment::getDummyAcceptContractCode;
 
 use evmOps::evmOp_callAndReturn;
@@ -630,7 +631,7 @@ public impure func evmCallStack_doCall(
             // Add a stipend, charged to the caller, if non-zero value is transferred.
             // This is needed because Ethereum provides a stipend, and some code depends on that.
             // The size of our stipend was chosen experimentally, to make sure a call that will run on Ethereum will run here.
-            gas = gas + const::ArbitrumNonZeroBalanceCallStipend;
+            gas = gas + chainParams_getOrDie(const::Atom_Param_ArbitrumNonZeroBalanceCallStipend);
         }
         if (gas > 63*availableGas/64) {
             gas = 63*availableGas/64;  // don't give the callee more than 63/64 of the call's gas
@@ -705,7 +706,7 @@ public impure func evmCallStack_doCall(
                                   topFrame.revertOnStorageWrite
                                   || ((balance == 0) && (gas < const::EVMWriteL1GasCost))
                                   || ((balance > 0) && (gas <= (const::EVMWriteL1GasCost
-                                                                + const::ArbitrumNonZeroBalanceCallStipend
+                                                                + chainParams_getOrDie(const::Atom_Param_ArbitrumNonZeroBalanceCallStipend)
                                                                 - const::EVMNonZeroBalanceCallStipend))),
             evmLogs: topFrame.evmLogs,
             selfDestructQueue: topFrame.selfDestructQueue,
