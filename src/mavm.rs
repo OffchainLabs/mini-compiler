@@ -313,10 +313,16 @@ impl fmt::Display for CodePt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 pub struct Buffer {
     root: Arc<BufferNode>,
     size: u128,
+}
+
+impl PartialEq for Buffer {
+    fn eq(&self, other: &Buffer) -> bool {
+        self.avm_hash() == other.avm_hash()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
