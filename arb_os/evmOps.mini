@@ -441,6 +441,7 @@ public impure func evmOp_mstore(memAddr: uint, value: uint) {
 }
 
 public impure func evmOp_mstore8(memAddr: uint, value:uint) {
+    debug((memAddr, value));
     if let Some(topFrame) = evmCallStack_topFrame() {
         let memory = bytearray_setByte(
             evmCallFrame_getMemory(topFrame),
