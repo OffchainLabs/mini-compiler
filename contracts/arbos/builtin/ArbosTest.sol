@@ -8,6 +8,8 @@ interface ArbosTest {
     function getAccountInfo(address addr) external view;  // returns raw returndata
 
     function burnArbGas(uint gasAmount) external view;
+
+    function setNonce(address addr, uint nonce) external;
 }
 
 

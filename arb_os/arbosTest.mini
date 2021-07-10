@@ -20,10 +20,12 @@ use accounts::account_setContractInfo;
 use accounts::account_getAllStorage;
 use accounts::account_getNextSeqNum;
 use accounts::account_getEthBalance;
+use accounts::account_setNextSeqNum;
 
 use codeSegment::translateEvmCodeSegment;
 
 use evmOps::evmOp_return;
+use evmOps::evmOp_revert_knownPc;
 use evmOps::evmOp_revert_knownCodePc;
 
 use evmCallStack::EvmCallFrame;
@@ -34,6 +36,8 @@ use evmCallStack::evmCallStack_setTopFrameMemory;
 use evmCallStack::evmCallStack_setAccount;
 use evmCallStack::evmCallFrame_getCaller;
 use evmCallStack::evmCallFrame_getAccount;
+use evmCallStack::evmCallStack_getAccountInCurrentContext;
+use evmCallStack::evmCallStack_setAccountInCurrentContext;
 
 
 public impure func arbosTest_txcall() {
@@ -51,6 +55,8 @@ public impure func arbosTest_txcall() {
             arbosTest_getAccountInfo(topFrame, calldata);
         } elseif (funcCode == const::funcCode_ArbosTest_burnArbGas) {
             arbosTest_burnArbGas(topFrame, calldata);
+        } elseif (funcCode == const::funcCode_ArbosTest_setNonce) {
+            arbosTest_setNonce(topFrame, calldata);
         } else {
             // unrecognized function code
             evmOp_revert_knownCodePc(address(const::Address_ArbosTest), 2, 0, 0);
@@ -185,5 +191,24 @@ impure func arbosTest_burnArbGas(_topFrame: EvmCallFrame, calldata: ByteArray) {
         gasToBurn = gasLeft - 1;
     }
     setGas(gasLeft - gasToBurn);
+    evmOp_return(0, 0);
+}
+
+impure func arbosTest_setNonce(topFrame: EvmCallFrame, calldata: ByteArray) {
+    if (evmCallFrame_getCaller(topFrame) != address(0)) {
+        evmOp_revert_knownPc(40, 0, 0);
+    }
+    if (bytearray_size(calldata) != 68) {
+        evmOp_revert_knownPc(41, 0, 0);
+    }
+    let addr = address(bytearray_get256(calldata, 4));
+    let newNonce = bytearray_get256(calldata, 36);
+    evmCallStack_setAccountInCurrentContext(
+        addr,
+        account_setNextSeqNum(
+            evmCallStack_getAccountInCurrentContext(addr),
+            newNonce,
+        ),
+    );
     evmOp_return(0, 0);
 }

@@ -131,6 +131,44 @@ pub fn evm_xcontract_call_with_constructors(
     Ok(true)
 }
 
+pub fn _evm_tests() -> Result<(), ethabi::Error> {
+    let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
+    machine.start_at_zero(true);
+
+    let mut test_contract = AbiForContract::new_from_file(&test_contract_path("EvmTests"))?;
+    if test_contract
+        .deploy(&[], &mut machine, Uint256::zero(), None, false)
+        .is_err()
+    {
+        panic!("failed to deploy EvmTests contract");
+    }
+
+    let mut add_contract = AbiForContract::new_from_file(&test_contract_path("Add"))?;
+    if add_contract
+        .deploy(&[], &mut machine, Uint256::zero(), None, false)
+        .is_err()
+    {
+        panic!("failed to deploy Add contract");
+    }
+
+    let (logs, sends) = test_contract.call_function(
+        Uint256::zero(),
+        "test",
+        &[ethabi::Token::Address(add_contract.address.to_h160())],
+        &mut machine,
+        Uint256::zero(),
+        false,
+    )?;
+    assert_eq!(logs.len(), 1);
+    assert_eq!(sends.len(), 0);
+    assert!(logs[0].succeeded());
+    let evm_logs = logs[0]._get_evm_logs();
+    assert_eq!(evm_logs.len(), 0);
+
+    machine.write_coverage("evm_tests".to_string());
+    Ok(())
+}
+
 pub fn _evm_tx_with_deposit(
     log_to: Option<&Path>,
     debug: bool,

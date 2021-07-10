@@ -258,6 +258,11 @@ fn test_direct_deploy_and_call_add() {
 }
 
 #[test]
+fn evm_tests() {
+    assert!(crate::evm::_evm_tests().is_ok());
+}
+
+#[test]
 fn test_call_from_contract() {
     let _log = crate::evm::_evm_test_contract_call(None, false);
 }

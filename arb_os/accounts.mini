@@ -278,6 +278,11 @@ public func account_getNextSeqNum(account: Account) -> uint {
     return account.nextSeqNum;
 }
 
+public func account_setNextSeqNum(account: Account, newSeqNum: uint) -> Account {
+    set account.nextSeqNum = newSeqNum;
+    return account;
+}
+
 public func account_getAggregatorDecompressionState(account: Account) -> option<AggregatorDecompressionState> {
     return (account.aggregatorInfo?).decompressionState;
 }

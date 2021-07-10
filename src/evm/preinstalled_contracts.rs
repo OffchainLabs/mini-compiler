@@ -5,6 +5,8 @@ use crate::uint256::Uint256;
 use crate::upload::CodeUploader;
 use ethers_core::utils::keccak256;
 use ethers_signers::{Signer, Wallet};
+use std::fs::File;
+use std::io::Read;
 use std::option::Option::None;
 use std::path::Path;
 
@@ -2819,6 +2821,35 @@ impl ArbosTest {
         assert_eq!(receipts.len(), 1);
         Ok(receipts[0].get_return_code().to_u64().unwrap())
     }
+
+    pub fn _set_nonce(
+        &self,
+        machine: &mut Machine,
+        addr: Uint256,
+        new_nonce: Uint256,
+    ) -> Result<(), ethabi::Error> {
+        let (receipts, _sends) = self.contract_abi.call_function(
+            Uint256::zero(),
+            "setNonce",
+            &[
+                ethabi::Token::Address(addr.to_h160()),
+                ethabi::Token::Uint(new_nonce.to_u256()),
+            ],
+            machine,
+            Uint256::zero(),
+            self.debug,
+        )?;
+
+        if receipts.len() != 1 {
+            return Err(ethabi::Error::from("wrong number of receipts"));
+        }
+
+        if receipts[0].succeeded() {
+            Ok(())
+        } else {
+            Err(ethabi::Error::from("reverted"))
+        }
+    }
 }
 
 #[test]
@@ -2983,4 +3014,178 @@ fn test_set_gas_price_estimate() {
     assert_eq!(storage_price, new_storage_price);
 
     machine.write_coverage("test_set_gas_price_estimate".to_string());
+}
+
+struct _Erc2470 {
+    _addr: Uint256,
+    contract_abi: AbiForContract,
+}
+
+impl _Erc2470 {
+    fn _new(machine: &mut Machine, ao: &_ArbOwner) -> Self {
+        let constructor_data = hex::decode("608060405234801561001057600080fd5b50610134806100206000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c80634af63f0214602d575b600080fd5b60cf60048036036040811015604157600080fd5b810190602081018135640100000000811115605b57600080fd5b820183602082011115606c57600080fd5b80359060200191846001830284011164010000000083111715608d57600080fd5b91908080601f016020809104026020016040519081016040528093929190818152602001838380828437600092019190915250929550509135925060eb915050565b604080516001600160a01b039092168252519081900360200190f35b6000818351602085016000f5939250505056fea26469706673582212206b44f8a82cb6b156bfcc3dc6aadd6df4eefd204bc928a4397fd15dacf6d5320564736f6c63430006020033").unwrap();
+        let deemed_sender =
+            Uint256::from_string_hex("Bb6e024b9cFFACB947A71991E386681B1Cd1477D").unwrap();
+        let deemed_nonce = Uint256::zero();
+
+        let deployed_addr = ao
+            ._deploy_contract(machine, &constructor_data, deemed_sender, deemed_nonce)
+            .unwrap();
+        let mut contract_abi =
+            AbiForContract::new_from_file(&test_contract_path("SingletonFactory")).unwrap();
+        contract_abi.bind_interface_to_address(deployed_addr.clone());
+        _Erc2470 {
+            _addr: deployed_addr,
+            contract_abi,
+        }
+    }
+
+    fn _deploy(
+        &self,
+        machine: &mut Machine,
+        code: Vec<u8>,
+        salt: Uint256,
+    ) -> Result<Uint256, ethabi::Error> {
+        let (receipts, sends) = self.contract_abi.call_function(
+            Uint256::zero(),
+            "deploy",
+            &[
+                ethabi::Token::Bytes(code),
+                ethabi::Token::FixedBytes(salt.to_bytes_be()),
+            ],
+            machine,
+            Uint256::zero(),
+            false,
+        )?;
+        if (receipts.len() != 1) || (sends.len() != 0) {
+            Err(ethabi::Error::from("wrong number of receipts or sends"))
+        } else if receipts[0].succeeded() {
+            Ok(Uint256::from_bytes(&receipts[0].get_return_data()))
+        } else {
+            Err(ethabi::Error::from("reverted"))
+        }
+    }
+
+    fn _deploy_from_file(
+        &self,
+        machine: &mut Machine,
+        code_filename: &str,
+        args: &[ethabi::Token],
+        salt: Uint256,
+    ) -> Result<Option<AbiForContract>, ethabi::Error> {
+        let path = Path::new(code_filename);
+        let mut file = File::open(path).map_err(|e| ethabi::Error::from(e.to_string()))?;
+        let mut s = String::new();
+        file.read_to_string(&mut s)
+            .map_err(|e| ethabi::Error::from(e.to_string()))?;
+
+        let json_from_file = serde_json::from_str::<serde_json::Value>(&s)
+            .map_err(|e| ethabi::Error::from(e.to_string()))?;
+
+        if let serde_json::Value::Object(fields) = json_from_file {
+            let decoded_insns = {
+                let code_str = fields
+                    .get("bytecode")
+                    .ok_or_else(|| ethabi::Error::from("no code key in json"))?
+                    .as_str()
+                    .unwrap()
+                    .to_string();
+                hex::decode(&code_str[2..]).unwrap()
+            };
+
+            let augmented_code = if let Some(constructor) = self.contract_abi.contract.constructor()
+            {
+                match constructor.encode_input(decoded_insns.clone(), args) {
+                    Ok(aug_code) => aug_code,
+                    Err(e) => {
+                        panic!("couldn't encode data for constructor: {:?}", e);
+                    }
+                }
+            } else {
+                decoded_insns.clone()
+            };
+
+            let addr = self._deploy(machine, augmented_code, salt)?;
+            if (addr == Uint256::zero()) {
+                Ok(None)
+            } else {
+                let mut contract = AbiForContract::new_from_file(code_filename)?;
+                contract.bind_interface_to_address(addr);
+                Ok(Some(contract))
+            }
+        } else {
+            Err(ethabi::Error::from("json file not an array"))
+        }
+    }
+}
+
+#[test]
+fn test_erc2470() {
+    let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
+    machine.start_at_zero(true);
+
+    let wallet = machine.runtime_env.new_wallet();
+    let ao = _ArbOwner::_new(&wallet, false);
+
+    let _erc = _Erc2470::_new(&mut machine, &ao);
+
+    let add_contract_filename = test_contract_path("Add");
+    let add = _erc
+        ._deploy_from_file(&mut machine, &add_contract_filename, &[], Uint256::zero())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        add.address,
+        Uint256::from_string_hex("7154b030bfa6f3b6937e57800eec2463e2c5687a").unwrap()
+    );
+
+    let (receipts, sends) = add
+        .call_function(
+            Uint256::zero(),
+            "add",
+            &[
+                ethabi::Token::Uint(Uint256::one().to_u256()),
+                ethabi::Token::Uint(Uint256::one().to_u256()),
+            ],
+            &mut machine,
+            Uint256::zero(),
+            false,
+        )
+        .unwrap();
+
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(sends.len(), 0);
+    assert!(receipts[0].succeeded());
+    assert_eq!(
+        Uint256::from_bytes(&receipts[0].get_return_data()),
+        Uint256::from_u64(2)
+    );
+
+    machine.write_coverage("test_erc2470".to_string());
+}
+
+#[test]
+fn test_create2_target_nonce_nonzero() {
+    let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
+    machine.start_at_zero(true);
+
+    let wallet = machine.runtime_env.new_wallet();
+    let ao = _ArbOwner::_new(&wallet, false);
+    let arbtest = ArbosTest::new(false);
+
+    let target_addr = Uint256::from_string_hex("7154b030bfa6f3b6937e57800eec2463e2c5687a").unwrap();
+    assert!(arbtest
+        ._set_nonce(&mut machine, target_addr, Uint256::one())
+        .is_ok());
+
+    let _erc = _Erc2470::_new(&mut machine, &ao);
+    let add_contract_filename = test_contract_path("Add");
+
+    // now a deploy of the add contract should fail, because the deploy address has nonzero nonce
+    let res = _erc
+        ._deploy_from_file(&mut machine, &add_contract_filename, &[], Uint256::zero())
+        .unwrap();
+    assert!(res.is_none());
+
+    machine.write_coverage("test_create2_target_nonce_nonzero".to_string());
 }

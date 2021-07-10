@@ -48,6 +48,7 @@ use accounts::account_getCode;
 use accounts::account_getStorageCell;
 use accounts::account_getAllStorage;
 use accounts::account_getEvmJumpTable;
+use accounts::account_getNextSeqNum;
 use accounts::account_fetchAndIncrSeqNum;
 use accounts::account_setContractInfo;
 use accounts::account_isEmpty;
@@ -1012,8 +1013,8 @@ public impure func evmOp_create2(value: uint, offset: uint, length: uint, salt: 
 #[noinline, ] public impure func doCreationOpcode(value: uint, constructorCode: ByteArray, newAddress: address) -> address {
     // make sure there isn't already an account at the given address
     if let Some(acct) = evmCallStack_getAccount(newAddress) {
-        if (account_hasContract(acct)) {
-            // there is already a contract at that address; return failure
+        if (account_hasContract(acct) || (account_getNextSeqNum(acct) != 0)) {
+            // there is already a contract at that address, or its nonce is nonzero; return failure
             return address(0);
         }
     } else {
