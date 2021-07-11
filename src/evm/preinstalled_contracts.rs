@@ -3189,3 +3189,39 @@ fn test_create2_target_nonce_nonzero() {
 
     machine.write_coverage("test_create2_target_nonce_nonzero".to_string());
 }
+
+#[test]
+fn test_eip_3541() {
+    let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
+    machine.start_at_zero(true);
+
+    let wallet = machine.runtime_env.new_wallet();
+    let ao = _ArbOwner::_new(&wallet, false);
+
+    let _erc = _Erc2470::_new(&mut machine, &ao);
+
+    // test cases that should fail, per EIP-3541
+    for code in &[
+        "60ef60005360016000f3",
+        "60ef60005360026000f3",
+        "60ef60005360036000f3",
+        "60ef60005360206000f3",
+    ] {
+        assert!(_erc
+            ._deploy(&mut machine, hex::decode(code).unwrap(), Uint256::zero())
+            .unwrap()
+            .is_zero());
+    }
+
+    // test case that should succeed, per EIP-3541
+    assert!(!_erc
+        ._deploy(
+            &mut machine,
+            hex::decode("60fe60005360016000f3").unwrap(),
+            Uint256::zero()
+        )
+        .unwrap()
+        .is_zero());
+
+    machine.write_coverage("test_eip_3541".to_string());
+}

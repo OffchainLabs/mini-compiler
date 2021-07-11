@@ -47,6 +47,7 @@ use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
 use std::bytearray::bytearray_extract;
 use std::bytearray::bytearray_copy;
+use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_set256;
 use std::bytestream::bytestream_new;
 
@@ -833,6 +834,12 @@ public impure func evmCallStack_returnFromCall(
         // top-level call completed; will need to return to external caller
         // we call get/setGlobalAccountStore (without the safety checks) in here,
         //       because we want to write to the global store but we haven't yet cleared the last frame from the call stack
+
+        if (success && globalCurrentTxRequest.isConstructor && (bytearray_size(returnData) > 0) && (bytearray_getByte(returnData, 0) == 0xef)) {
+            // per EIP-3541, fail the transaction because the resulting account code starts with 0xef
+            success = false;
+            returnData = bytearray_new(0);
+        }
 
         if (success) {
             let (entryPoint, evmJumpTable) = xif (globalCurrentTxRequest.isConstructor) {

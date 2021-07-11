@@ -311,6 +311,8 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
                                 code = pushEvmInsnCall(const::EvmOp_chainId, code);
                             } elseif (opcode == 0x47) { // SELFBALANCE
                                 code = pushEvmInsnCall(const::EvmOp_selfbalance, code);
+                            } elseif (opcode == 0x48) { // BASEFEE
+                                code = pushEvmInsnCall(const::EvmOp_gasprice, code);
                             } elseif (opcode == 0x50) { // POP
                                 code = pushInstruction(const::AVM_pop, code);
                             } elseif (opcode == 0x51) { // MLOAD

@@ -70,6 +70,7 @@ use tracing::evmTracer_pushCreate2;
 
 use std::bytearray::bytearray_new;
 use std::bytearray::bytearray_size;
+use std::bytearray::bytearray_getByte;
 use std::bytearray::bytearray_setByte;
 use std::bytearray::bytearray_get256;
 use std::bytearray::bytearray_set256;
@@ -1054,30 +1055,32 @@ public impure func evmOp_create2(value: uint, offset: uint, length: uint, salt: 
 
         if (constructorSucceeded) {
             if let Some(contractCode) = evmCallStack_getTopFrameReturnData() {
-                let astore = evmCallStack_getAccountStoreInCurrentContext();
-                if let Some(res) = accountStore_createOrAddCodeRef(astore, contractCode) {
-                    let (uastore, startPoint2, evmJumpTable2, _) = res;
-                    evmCallStack_setAccountStoreInCurrentContext(uastore);
-                    if let Some(oldAcct) = evmCallStack_getAccount(newAddress) {
-                        let storage = xif let Some(st) = account_getAllStorage(oldAcct) {
-                            st
-                        } else {
-                            storageMap_new()
-                        };
-                        if (evmCallStack_setAccount(
-                                newAddress,
-                                account_setContractInfo(
-                                    oldAcct,
-                                    contractCode,
-                                    evmJumpTable2,
-                                    startPoint2,
-                                    storage,
-                                    true,
+                if ((bytearray_size(contractCode) == 0) || (bytearray_getByte(contractCode, 0) != 0xef)) { // required by EIP-3541
+                    let astore = evmCallStack_getAccountStoreInCurrentContext();
+                    if let Some(res) = accountStore_createOrAddCodeRef(astore, contractCode) {
+                        let (uastore, startPoint2, evmJumpTable2, _) = res;
+                        evmCallStack_setAccountStoreInCurrentContext(uastore);
+                        if let Some(oldAcct) = evmCallStack_getAccount(newAddress) {
+                            let storage = xif let Some(st) = account_getAllStorage(oldAcct) {
+                                st
+                            } else {
+                                storageMap_new()
+                            };
+                            if (evmCallStack_setAccount(
+                                    newAddress,
+                                    account_setContractInfo(
+                                        oldAcct,
+                                        contractCode,
+                                        evmJumpTable2,
+                                        startPoint2,
+                                        storage,
+                                        true,
+                                    )
                                 )
-                            )
-                        ) {
-                            evmCallStack_changeNumAccounts(int(1));
-                            return newAddress;
+                            ) {
+                                evmCallStack_changeNumAccounts(int(1));
+                                return newAddress;
+                            }
                         }
                     }
                 }
