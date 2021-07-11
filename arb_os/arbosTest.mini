@@ -22,6 +22,8 @@ use accounts::account_getNextSeqNum;
 use accounts::account_getEthBalance;
 use accounts::account_setNextSeqNum;
 
+use chainParameters::chainParams_getOrDie;
+
 use codeSegment::translateEvmCodeSegment;
 
 use evmOps::evmOp_return;
@@ -180,12 +182,12 @@ impure func arbosTest_getAccountInfo(topFrame: EvmCallFrame, calldata: ByteArray
     }
 }
 
-impure func arbosTest_burnArbGas(_topFrame: EvmCallFrame, calldata: ByteArray) { // (address) -> bytes
+impure func arbosTest_burnArbGas(_topFrame: EvmCallFrame, calldata: ByteArray) {
     // Burn a specified amount of ArbGas
     if (bytearray_size(calldata) != 36) {
         evmOp_revert_knownCodePc(address(const::Address_ArbosTest), 30, 0, 0);
     }
-    let gasToBurn = bytearray_get256(calldata, 4) * const::Charging_DefaultArbGasDivisor;
+    let gasToBurn = bytearray_get256(calldata, 4) * chainParams_getOrDie(const::Atom_Param_AvmGasPerArbGas);
     let gasLeft = getGas();
     if (gasToBurn >= gasLeft) {
         gasToBurn = gasLeft - 1;

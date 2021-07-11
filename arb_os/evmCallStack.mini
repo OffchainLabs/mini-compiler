@@ -72,6 +72,7 @@ use gasAccounting::gasAccounting_resumeTxCharges;
 use gasAccounting::txFeeStats_zero;
 use gasAccounting::getAddressForReserveFundsDeposit;
 use gasAccounting::deferredPayments_apply;
+use gasAccounting::gasAccounting_getStoragePriceInArbGas;
 
 use codeSegment::translateEvmCodeSegment;
 
@@ -774,6 +775,18 @@ public impure func evmCallStack_returnFromCall(
     return xif let Some(newTopFrame) = topFrame.parent {
         // Returning from a non-top-level call
 
+        // Make sure the call didn't use more storage than it could afford
+        let storageIncrease = topFrame.storageDelta - newTopFrame.storageDelta;
+        if (storageIncrease > int(0)) {
+            let extraStorageCost = uint(storageIncrease) * gasAccounting_getStoragePriceInArbGas();
+            if (extraStorageCost > leftoverGas) {
+                // the call didn't save enough gas to cover its storage, so treat it as out-of-gas
+                success = false;
+                returnData = bytearray_new(0);
+                leftoverGas = 0;
+            }
+        }
+
         topFrame = topFrame with {   // copy cached account back into callframe's main accountStore
             accountStore: accountStore_set(
                 topFrame.accountStore,
@@ -1393,6 +1406,18 @@ public impure func evmCallStack_setTopFrameMemory(mem: ByteArray) -> bool {
         true
     } else {
         false
+    };
+}
+
+public impure func evmCallStack_currentFrameStorageDelta() -> int {
+    return xif let Some(topFrame) = globalCallStack {
+        xif let Some(parentFrame) = topFrame.parent {
+            topFrame.storageDelta - parentFrame.storageDelta
+        } else {
+            topFrame.storageDelta
+        }
+    } else {
+        int(0)
     };
 }
 

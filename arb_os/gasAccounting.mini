@@ -133,7 +133,7 @@ public impure func gasAccounting_notifyParamsChanged() {
 impure func setupParameters(isInit: bool) {
     let l1GasPerL1CalldataUnit = chainParams_getOrDie(const::Atom_Param_L1GasPerL1CalldataUnit);
     let l1GasPerStorage = chainParams_getOrDie(const::Atom_Param_L1GasPerStorage);
-    let arbGasDivisor = chainParams_getOrDie(const::Atom_Param_ArbGasDivisor);
+    let arbGasDivisor = chainParams_getOrDie(const::Atom_Param_AvmGasPerArbGas);
     let pricingParams = struct {
         l1GasPerL1CalldataUnit: l1GasPerL1CalldataUnit,
         l1GasPerStorage: l1GasPerStorage,
@@ -245,9 +245,25 @@ impure func setRetryablePrices(oldRetryablePrices: RetryablePrices) -> Retryable
         xif (feesEnabled()) {
             let gasPrice = getL1GasPriceEstimate();
             struct {
-                perTx: safeMul(gasPrice, chainParams_getOrDie(const::Atom_Param_RetryablePriceBase)),
-                perCalldataByte: safeMul(gasPrice, chainParams_getOrDie(const::Atom_Param_RetryablePricePerByteNumerator)) /
-                                            chainParams_getOrDie(const::Atom_Param_RetryablePricePerByteDenominator),
+                perTx: {
+                    let try = safeMul(gasPrice, chainParams_getOrDie(const::Atom_Param_RetryablePriceBase));
+                    let cap = 3 * oldRetryablePrices.perTx / 2;
+                    xif ((cap > 0) && (try > cap)) {
+                        cap
+                    } else {
+                        try
+                    }
+                },
+                perCalldataByte: {
+                    let try = safeMul(gasPrice, chainParams_getOrDie(const::Atom_Param_RetryablePricePerByteNumerator)) /
+                                                chainParams_getOrDie(const::Atom_Param_RetryablePricePerByteDenominator);
+                    let cap = 3 * oldRetryablePrices.perCalldataByte / 2;
+                    xif ((cap > 0) && (try > cap)) {
+                        cap
+                    } else {
+                        try
+                    }
+                },
                 nextUpdateTimestamp: safeAdd(
                     inbox_currentTimestamp(),
                     chainParams_getOrDie(const::Atom_Param_RetryableTxRepriceIntervalSeconds)
@@ -342,6 +358,16 @@ public impure func gasAccounting_getPricesInArbGas(aggregatorAddr: address) -> (
     );
 }
 
+public impure func gasAccounting_getStoragePriceInArbGas() -> uint {
+    let prices = gasAccountingInfo.currentPrices;
+    let arbGasPrice = prices.perArbGasTotal;
+    return xif (arbGasPrice==0) {
+        0
+    } else {
+        safeAdd(prices.perStorageCell, arbGasPrice-1) / arbGasPrice
+    };
+}
+
 public impure func getAddressForReserveFundsDeposit() -> address {
     return address(chainParams_getOrDie(const::Atom_Param_CongestionFeeRecipient));
 }
@@ -412,7 +438,7 @@ public impure func gasAccounting_startTxCharges(
         return (const::TxResultCode_noGasFunds, acctStore);
     }
 
-    let gasUsedByOS = ((~0) - getGas()) / const::Charging_ArbGasPerAvmGas;
+    let gasUsedByOS = ((~0) - getGas()) / gasAccountingInfo.pricingParams.arbGasDivisor;
 
     set gasAccountingInfo.txState = Some(struct {
         gasInReserve: 0,
@@ -426,7 +452,7 @@ public impure func gasAccounting_startTxCharges(
 
     arbStatistics_addToGasUsed(gasUsedByOS);
 
-    setGas(safeMul(gasForComputation, const::Charging_ArbGasPerAvmGas));
+    setGas(safeMul(gasForComputation, gasAccountingInfo.pricingParams.arbGasDivisor));
 
     return (const::TxResultCode_success, acctStore);
 }
@@ -543,10 +569,10 @@ public impure func gasAccounting_pauseTxCharges() -> uint {
     // return how many units of the tx's initial maxGas are still unused
 
     return xif let Some(txState) = gasAccountingInfo.txState {
-        let gasRemaining = safeAdd(txState.gasInReserve, switchToChargingOS());
-        set txState.gasInReserve = gasRemaining;
+        let currentGasUnused = switchToChargingOS();
+        set txState.gasInReserve = safeAdd(txState.gasInReserve, currentGasUnused);
         set gasAccountingInfo.txState = Some(txState);
-        gasRemaining
+        currentGasUnused
     } else {
         // oops, someone tried to pause tx charges when there's no active tx
         // to be safe, report that the tx is completely out of gas
@@ -561,7 +587,7 @@ public impure func gasAccounting_resumeTxCharges(allocationRequested: uint) -> u
 
     return xif let Some(txState) = gasAccountingInfo.txState {
         // stop charging the OS, and record the OS gas usage as overhead
-        let osGasUsed = ((~0) - getGas()) / const::Charging_ArbGasPerAvmGas;
+        let osGasUsed = ((~0) - getGas()) / gasAccountingInfo.pricingParams.arbGasDivisor;
 
         if (allocationRequested > txState.gasInReserve) {
             allocationRequested = txState.gasInReserve;  // can't request more gas than you have
@@ -573,7 +599,7 @@ public impure func gasAccounting_resumeTxCharges(allocationRequested: uint) -> u
 
         arbStatistics_addToGasUsed(osGasUsed);
 
-        setGas(safeMul(allocationRequested, const::Charging_ArbGasPerAvmGas));   // start charging the application
+        setGas(safeMul(allocationRequested, gasAccountingInfo.pricingParams.arbGasDivisor));   // start charging the application
 
         allocationRequested
     } else {
@@ -593,7 +619,7 @@ impure func switchToChargingOS() -> uint {
     } else {
         // we were charging the tx; switch to charging the OS and return tx's unused amount from ArbGasRemaining
         setGas(~0);
-        avmGasRemaining / const::Charging_ArbGasPerAvmGas
+        avmGasRemaining / chainParams_getOrDie(const::Atom_Param_AvmGasPerArbGas)
     };
 }
 

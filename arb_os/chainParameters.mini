@@ -58,7 +58,7 @@ public func chainParams_getDefaults() -> map<uint, uint> {
         with { [const::Atom_Param_ChainOwner] = const::Default_Param_ChainOwner }
         with { [const::Atom_Param_L1GasPerL1CalldataUnit] = const::Default_Param_L1GasPerL1CalldataUnit }
         with { [const::Atom_Param_L1GasPerStorage] = const::Default_Param_L1GasPerStorage }
-        with { [const::Atom_Param_ArbGasDivisor] = const::Default_Param_ArbGasDivisor }
+        with { [const::Atom_Param_AvmGasPerArbGas] = const::Default_Param_AvmGasPerArbGas }
         with { [const::Atom_Param_NetworkFeeShareNumerator] = const::Default_Param_NetworkFeeShareNumerator }
         with { [const::Atom_Param_NetworkFeeShareDenominator] = const::Default_Param_NetworkFeeShareDenominator }
         with { [const::Atom_Param_GasPoolMax] = const::Default_Param_GasPoolMax }
