@@ -8,6 +8,7 @@ use std::ripemd160::ripemd160hasher_new;
 use std::ripemd160::ripemd160hasher_finish;
 use std::ripemd160::ripemd160_byteArray;
 use std::ripemd160::ripemd160hasher_pushByte;
+use std::ripemd160::ripemd160hasher_push256;
 
 impure func main() {
 	asm(tests(),) { log };
@@ -60,6 +61,22 @@ func tests() -> uint {
     if (ripemd160hasher_finish(h) != bytes32(0x74e856c137772846e18c0c6d955666133f1d32dc)) {
         return 6;
     }
-
+    
+    let h = ripemd160hasher_new();
+    let i = 0x00;
+    while (i < 55) {
+        h = ripemd160hasher_pushByte(h, i);
+        i = i + 1;
+    }
+    if (ripemd160hasher_finish(h) != bytes32(0x3c86963b3ff646a65ae42996e9664c747cc7e5e6)) {
+        return 7;
+    }
+    
+    let h = ripemd160hasher_new();
+    h = ripemd160hasher_push256(h, uint(0x0cdd6941697c828be460f241d6e71106a408c854e351c54f46b6500b106e2cdb));
+    if (ripemd160hasher_finish(h) != bytes32(0xfe27e5ab7fdee1be58e9ee498709c337d4b54ba4)) {
+        return 8;
+    }
+    
 	return 0;
 }

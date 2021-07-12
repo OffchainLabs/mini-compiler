@@ -4,7 +4,13 @@
 
 use bridge_arbos_versions::GlobalsBeforeUpgrade;
 
+use accounts::AccountStore;
+
 use evmCallStack::EvmCallFrame;
+use evmCallStack::IncomingRequestAndLogs;
+
+use output::PerBlockReceiptData;
+use output::OutputStatistics;
 
 
 public func set_globalChainParameters_onUpgrade(oldGlobals: GlobalsBeforeUpgrade) -> map<uint, uint> {
@@ -15,4 +21,26 @@ public func set_globalChainParameters_onUpgrade(oldGlobals: GlobalsBeforeUpgrade
 
 public func set_globalCallStack_onUpgrade(_oldGlobals: GlobalsBeforeUpgrade) -> option<EvmCallFrame> {
     return None<EvmCallFrame>;
+}
+
+public func set_globalCurrentRetryableRequest_onUpgrade(_oldGlobals: GlobalsBeforeUpgrade) -> option<IncomingRequestAndLogs> {
+    return None<IncomingRequestAndLogs>;
+}
+
+public func set_globalBlockReceiptData_onUpgrade(oldGlobals: GlobalsBeforeUpgrade
+) -> struct {
+    data: PerBlockReceiptData,
+    statsThisBlock: OutputStatistics,
+    statsAllTime: OutputStatistics,
+    lastArbBlockNum: uint,
+    nextSendTimestamp: uint,
+} {
+    let old = oldGlobals.globalBlockReceiptData;
+    return struct {
+        data: old.data,
+        statsThisBlock: old.statsThisBlock,
+        statsAllTime: old.statsAllTime,
+        lastArbBlockNum: old.lastBlockNum,
+        nextSendTimestamp: old.nextSendTime,
+    };
 }

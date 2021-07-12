@@ -22,6 +22,13 @@ extern {
     type Error = String;
 }
 
+match {
+    r"\s*" => { },                                                                 // Skip whitespace
+    r"/\*(([^*/]|\n)|(\*+([^*/]|\n)|/([^*/]|\n)*|/\*([^*/]|\n)*))*\**\*/" => { },  // Skip multi-line comments
+    r"//[^\n\r]*[\n\r]*" => { },                                                   // Skip single-line comments
+    _
+}
+
 pub Decls: Vec<TopLevelDecl> = {
 	<a: ("#![" <Attributes> "]")?><mut i:HeadDecl*> <mut n:BodyDecl+> => {
         i.append(&mut n);
@@ -156,6 +163,7 @@ StatementKind: StatementKind = {
     "break" <e: Expr?> ";" => StatementKind::Break(e, None),
     "debug" "(" <e: Expr> ")" ";" => StatementKind::DebugPrint(e),
     "assert" "(" <e: Expr> ")" ";" => StatementKind::Assert(e),
+    "asm" "(" <e: Expr> ")" "{" <body:AsmInsn*> "}" ";" => StatementKind::Asm(body, vec![e]),
     "asm" "(" <a:CommaedExprs?> ")" "{" <body:AsmInsn*> "}" ";" => StatementKind::Asm(body, a.unwrap_or(vec![])),
     <lno: @L> "set" <i:Ident> <s: SubData+> "=" <e: Expr> ";" => {
 
@@ -430,6 +438,7 @@ Expr12: Expr = {
 }
 
 Expr13: Expr = {
+    <lno: @L> "asm" "(" <e:Expr> ")" <rt:Type> "{" <body:AsmInsn*> "}" => Expr { kind: ExprKind::Asm(rt, body, vec![e]), debug_info: DebugInfo::from(file_info.location(BytePos::from(lno), filename))},
 	<lno: @L> "asm" "(" <a:CommaedExprs?> ")" <rt:Type> "{" <body:AsmInsn*> "}" => Expr { kind: ExprKind::Asm(rt, body, a.unwrap_or(vec![])), debug_info: DebugInfo::from(file_info.location(BytePos::from(lno), filename))},
 	<lno: @L> "struct" "{" <fi: FieldInitializers> "}" => Expr { kind: ExprKind::StructInitializer(fi), debug_info: DebugInfo::from(file_info.location(BytePos::from(lno), filename))},
 	"(" <e: Expr> ")" => <>,

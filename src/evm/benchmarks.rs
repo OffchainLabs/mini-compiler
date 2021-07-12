@@ -41,7 +41,7 @@ pub fn make_benchmarks() -> Result<(), ethabi::Error> {
 
 pub fn benchmark_boot(_iterations: u64, log_to: &Path) -> Result<u64, ethabi::Error> {
     let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
-    machine.start_at_zero();
+    machine.start_at_zero(false);
 
     let gas_used = machine.run(None);
     machine
@@ -54,7 +54,7 @@ pub fn benchmark_boot(_iterations: u64, log_to: &Path) -> Result<u64, ethabi::Er
 
 pub fn benchmark_add(iterations: u64, log_to: &Path) -> Result<u64, ethabi::Error> {
     let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
-    machine.start_at_zero();
+    machine.start_at_zero(false);
 
     let my_addr = Uint256::from_u64(1025);
     let contract = deploy_add(&mut machine)?;
@@ -86,7 +86,7 @@ pub fn benchmark_add(iterations: u64, log_to: &Path) -> Result<u64, ethabi::Erro
 
 pub fn benchmark_add_batched(iterations: u64, log_to: &Path) -> Result<u64, ethabi::Error> {
     let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
-    machine.start_at_zero();
+    machine.start_at_zero(false);
 
     let wallet = machine.runtime_env.new_wallet();
 

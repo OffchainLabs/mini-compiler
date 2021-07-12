@@ -7,15 +7,18 @@ use std::sync::Arc;
 
 fn compile_run_cycle(input: String) -> Machine {
     let mut compile = CompileStruct::default();
-    compile.input = vec![input];
+    compile.input = vec![input.clone()];
     compile.test_mode = true;
     compile.consts_file = Some(format!("arb_os/constants.json"));
+
     let mexe = match compile.invoke() {
         Ok((mexe, _error_system)) => mexe,
         Err(_error_system) => panic!("failed to compile"),
     };
     let mut machine = Machine::new(mexe, RuntimeEnvironment::new(None));
-    run(&mut machine, vec![], false).unwrap();
+    machine.start_coverage();
+    run(&mut machine, vec![], false, None).unwrap();
+    machine.write_coverage(input.replace("/", "-").replace(".mini", ""));
     machine
 }
 

@@ -33,7 +33,7 @@ public impure func chainParams_getOrDie(which: uint) -> uint {
 }
 
 public impure func chainParams_set(which: uint, value: uint) {
-    globalChainParameters = globalChainParameters with { [which] = value };
+    set globalChainParameters[which] = value;
 }
 
 public impure func chainParams_init() {
@@ -79,8 +79,7 @@ public impure func chainParams_gotParamsMessage(data: ByteArray) {
     let stream = bytestream_new(data);
     loop {
         let paramId = xif let Some(res) = bytestream_get256(stream) {
-            let (ustr, pid) = res;
-            stream = ustr;
+            let (*stream, pid) = res;
             pid
         } else {
             notifyParamsChanged();
@@ -88,8 +87,7 @@ public impure func chainParams_gotParamsMessage(data: ByteArray) {
             0
         };
         let value = xif let Some(res) = bytestream_get256(stream) {
-            let (ustr, val) = res;
-            stream = ustr;
+            let (*stream, val) = res;
             val
         } else {
             notifyParamsChanged();

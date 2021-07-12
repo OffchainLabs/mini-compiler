@@ -15,9 +15,7 @@ public impure func blockhash_init() {
 }
 
 public impure func blockhash_getForBlock(blockNum: uint) -> option<bytes32> {
-    return xif (blockNum > blockhashes.latestBlockNum) {
-        None<bytes32>
-    } elseif (blockNum < blockhashes.latestBlockNum-255) {
+    return xif ( (blockNum > blockhashes.latestBlockNum) || (blockNum < blockhashes.latestBlockNum-255) ) {
         None<bytes32>
     } else {
         Some(blockhashes.oldHashes[blockNum % 256])
@@ -30,13 +28,9 @@ public impure func blockhash_submitHash(ethBlockNum: uint, inboxAccumHash: bytes
     } else {
         ethBlockNum
     };
-    while (b <= ethBlockNum) {
-        blockhashes = blockhashes with {
-            oldHashes: blockhashes.oldHashes with { [b % 256] = hash(bytes32(b), inboxAccumHash) }
-        };
+    while (b <= ethBlockNum) {  //FORLOOP
+        set blockhashes.oldHashes[b%256] = hash(bytes32(b), inboxAccumHash);
         b = b + 1;
     }
-    blockhashes = blockhashes with {
-        latestBlockNum: ethBlockNum
-    };
+    set blockhashes.latestBlockNum = ethBlockNum;
 }

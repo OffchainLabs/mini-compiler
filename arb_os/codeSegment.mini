@@ -26,8 +26,8 @@ use std::avmcodebuilder::pushValue;
 
 type EvmInstruction = struct {
     opcode: uint,
-    data: option<uint>,
-    pc: uint,
+    data: option<uint>,  // data to push, if it's a PUSH type instruction
+    pc: uint,            // EVM program counter
 }
 
 type EvmInstructionStack = Stack
@@ -46,33 +46,41 @@ func evmInstructionStack_pop(s: EvmInstructionStack) -> option<(EvmInstructionSt
 }
 
 var codeSegGlobals: struct {
-    unreachableMask: uint,
-    dummyAcceptContractCode: AvmCodePoint,
+    unreachableMask: uint,                // bit i is set iff EVM opcode i never allows execution to continue to the next instruction
+    dummyAcceptContractCode: AvmCodePoint, // code for a contract that just immediately returns
 };
 
+// Given an EVM code segment, parse it into individual instructions, and push them onto an EvmInstructionStack
+// Instructions that are definitely unreachable (== not possibly reachable) will not be pushed.
+// An instruction is possibly reachable if:
+//     * it is the first instruction in the program, or
+//     * the previous instruction was possibly reachable and the previous instruction could allow execution to continue to its successor, or
+//     * it is a JUMPDEST instruction
+// The resulting stack will have the last instruction on top. This is desirable because code generation wants
+//     to consume the instructions in reverse order.
 impure func parseEvmCodeSegment(bs: ByteStream) -> EvmInstructionStack {
     let stack = evmInstructionStack_new();
     let evmPc = 0;
-    let reachable = true;
+    let reachable = true;   // true if the next instruction is reachable
     return xloop {
         if let Some(res) = bytestream_getByte(bs) {
-            let (ubs, opcode) = res;
-            bs = ubs;
-            if (opcode == 0x5b) {    reachable = true;    }
+            let (*bs, opcode) = res;
+            if (opcode == const::EvmOpcode_jumpdest) {
+                reachable = true;
+            }
 
-            if ((opcode >= 0x60) && (opcode <= 0x7f)) {
+            if ((opcode >= const::EvmOpcode_push1) && (opcode <= const::EvmOpcode_push32)) {
                 // it's a pushN instruction; unmarshal the immediate value and push it
-                let bytesRemaining = opcode - 0x5f;
+                let bytesRemaining = opcode - (const::EvmOpcode_push1 - 1);
                 let imm = xif let Some(res) = bytestream_getPartialWord(bs, bytesRemaining) {
-                    let (ubs, v) = res;
-                    bs = ubs;
+                    let (*bs, v) = res;
                     v
                 } else {
+                    // code segment ended unexpectedly, so parse and push as many bytes as we can, per EVM spec
                     let val = 0;
                     while (bytesRemaining > 0) {
                         if let Some(res) = bytestream_getByte(bs) {
-                            let (ubs, v) = res;
-                            bs = ubs;
+                            let (*bs, v) = res;
                             val = 256*val + v;
                         }
                         bytesRemaining = bytesRemaining-1;
@@ -89,7 +97,7 @@ impure func parseEvmCodeSegment(bs: ByteStream) -> EvmInstructionStack {
                         }
                     );
                 }
-                evmPc = evmPc + (opcode - 0x5f) + 1;
+                evmPc = evmPc + (opcode - (const::EvmOpcode_push1 - 1)) + 1;
             } else {
                 if (reachable) {
                     stack = evmInstructionStack_push(
@@ -150,10 +158,19 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
         || (opcode == 0xff); // SELFDESTRUCT
 }
 
+// Generate AVM code for a parsed EVM code segment.
+// This builds an AVM code segment corresponding to the provided EVM code.
+// The AVM code is build from back to front, starting with the last EVM instruction (which is on top of the insns stack).
 #[noinline, ] impure func generateCodeForEvmSegment(
     insns: EvmInstructionStack,
     makePcTable: bool,
-) -> (AvmCodePoint, map<uint, AvmCodePoint>, Stack) {
+) -> (
+    AvmCodePoint,              // entry point of the resulting code
+    map<uint, AvmCodePoint>,   // for all EVM JUMPDESTs in the code, map the EVM PC to corresponding AVM codepoint
+    Stack                      // PC table (if makePcTable is true)
+) {
+    // At the end of the generated code, add an EVM STOP instruction, so falling off the end of the EVM code
+    //      behaves like an EVM STOP instruction, per the EVM spec.
     let code = pushEvmInsnCall(
         const::EvmOp_stop,
         asm() AvmCodePoint { errcodept },
@@ -164,10 +181,9 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
     return xloop {
         if let Some(res) = evmInstructionStack_pop(insns) {
             let invalidInstruction = false;
-            let (uinsns, insn) = res;
-            insns = uinsns;
+            let (*insns, insn) = res;
             let opcode = insn.opcode;
-            if (opcode < 0x80) {
+            if (opcode < 0x80) {    // nested if/else structure is for efficiency, to avoid long if/elseif/else chain
                 if (opcode < 0x40) {
                     if (opcode < 0x20) {
                         if (opcode < 0x10) {
@@ -273,7 +289,7 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
                                 if (opcode == 0x40) { // BLOCKHASH
                                     code = pushEvmInsnCall(const::EvmOp_blockhash, code);
                                 } elseif (opcode == 0x41) { // COINBASE
-                                    code = pushValue(0, code);
+                                    code = pushValue(0, code);   // instruction doesn't make sense on L2, return a constant
                                 } elseif (opcode == 0x42) { // TIMESTAMP
                                     code = pushEvmInsnCall(const::EvmOp_timestamp, code);
                                 } else {
@@ -283,7 +299,7 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
                                 if (opcode == 0x43) { // NUMBER
                                     code = pushEvmInsnCall(const::EvmOp_number, code);
                                 } elseif (opcode == 0x44) { // DIFFICULTY
-                                     code = pushValue(2500000000000000, code);
+                                     code = pushValue(2500000000000000, code);  // instruction doesn't make sense on L2, return a constant
                                 } else {
                                     invalidInstruction = true;
                                 }
@@ -319,11 +335,15 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
                                 }
                             } else {
                                 if (opcode == 0x56) { // JUMP
+                                    // first translate destination EVM PC to AVM codepoint, then jump to that codepoint
                                     code = pushEvmInsnCall(
                                         const::EvmOp_getjumpaddr,
                                         pushInstruction(const::AVM_jump, code),
                                     );
                                 } elseif (opcode == 0x57) { // JUMPI
+                                    // conditional jump compiles to a little if/else structure
+                                    //     if we're going to jump, act like a jump instruction
+                                    //     else act like a pop instruction
                                     let doJump = pushEvmInsnCall(
                                         const::EvmOp_getjumpaddr,
                                         pushInstruction(const::AVM_jump, code),
@@ -441,6 +461,8 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
                             }
                         } else {
                             if (opcode == 0xfd) { // REVERT
+                                // push the EVM PC, then use a version of revert that expects the PC
+                                //     this will allow us to report the revert location in the tx receipt, to aid app debugging
                                 code = pushValue(
                                     insn.pc,
                                     pushEvmInsnCall(const::EvmOp_revert_knownPc, code)
@@ -455,6 +477,7 @@ func unreachableAfterOpcode(opcode: uint) -> bool {
                 }
             }
             if (invalidInstruction) {
+                // invalid instruction is equivalent to a revert
                 code = pushValue(
                     0,
                     pushValue(
@@ -491,15 +514,15 @@ impure func pushEvmInsnDenomCheck(
     restOfCode: AvmCodePoint,
 ) -> AvmCodePoint {
     // Deal with the EVM instructions that can "divide by zero" or the equivalent.
-    // EVM defines these to return zero if the denominator is zero.
+    // EVM defines these to return zero if the denominator/modulus is zero, but in AVM these cases are an error.
     // So we need to generate a little conditional to handle the special case.
     let doTheOp = pushInstruction(opcode, restOfCode);
     return pushDupn(
         numStackOperands-1,  // dup denominator/modulus to top of stack
         pushInstructionImm(
-            const::AVM_cjump,
+            const::AVM_cjump,  // jump to do the operation if the modulus/denominator is nonzero
             doTheOp,
-            prependPops(
+            prependPops(  // modulus/denominator was zero, so pop the args and push a zero
                 numStackOperands,
                 pushValue(
                     0,
@@ -578,20 +601,22 @@ impure func pushSwapn(
 
 impure func pushEvmInsnCall(evmOpNum: uint, code: AvmCodePoint) -> AvmCodePoint {
     // Some EVM instructions compile to a procedure call to some Mini code.
-    // Generate the appropriate procedure call.
-    // Note that the EVM code will already have put the args to the call on the stack,
-    //     and the Mini code will leave return values on the stack.
+    // These calls go indirectly through a dispatch function. The codepoint of the dispatch function is stored
+    //     at a fixed location in the AVM Register.  So we will generate code to read the Register,
+    //     extract the codepoint of the dispatch function from it, and jump to the dispatch function.
+    // Note that the EVM code will already have put the args to the instruction on the stack,
+    //     and the Mini code will leave the return value(s) of the instruction (if any) on the stack.
     return pushValue(
         evmOpNum,
         pushValue(
             code,
             pushInstruction(
-                const::AVM_rpush,
+                const::AVM_rpush,         // read the AVM Register
                 pushInstructionImm(
-                    const::AVM_tget,
+                    const::AVM_tget,      // extract the codepoint of the dispatch function
                     0,
                     pushInstruction(
-                        const::AVM_jump,
+                        const::AVM_jump, // jump to the dispatch function
                         code,
                     ),
                 ),

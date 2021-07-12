@@ -6,6 +6,7 @@ use core::kvs::Kvs;
 use core::kvs::builtin_kvsNew;
 use core::kvs::builtin_kvsGet;
 use core::kvs::builtin_kvsSet;
+use core::kvs::builtin_kvsHasKey;
 use core::kvs::builtin_kvsDelete;
 use core::kvs::builtin_kvsForall;
 use core::kvs::builtin_kvsSize;
@@ -19,6 +20,7 @@ func tests() -> uint {
 	if (builtin_kvsGet(s, 17) != None<any>) {
 		return 1;
 	}
+    s = builtin_kvsDelete(s, 17);
 	if (builtin_kvsSize(s) != 0) {
 	    return 101;
 	}
@@ -71,11 +73,19 @@ func tests() -> uint {
 	while (i < 27) {
 		s = builtin_kvsSet(s, i, 1000+i);
 		i = i+1;
+        if (!builtin_kvsHasKey(s, i-1)) {
+            return 6;
+        }
 	}
 	s = builtin_kvsDelete(s, 17);
 	if (builtin_kvsGet(s, 17) != None<any>) {
 		return 6;
 	}
+    if (builtin_kvsHasKey(s, 17)) {
+        return 6;
+    }
+    s = builtin_kvsDelete(s, 17);
+    s = builtin_kvsDelete(s, 1000);
 	if (builtin_kvsSize(s) != 26) {
 	    return 106;
 	}

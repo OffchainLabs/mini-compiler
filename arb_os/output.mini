@@ -87,18 +87,16 @@ var globalBlockReceiptData: struct {
     data: PerBlockReceiptData,
     statsThisBlock: OutputStatistics,
     statsAllTime: OutputStatistics,
-    lastBlockNum: uint,
-    nextSendTime: uint,
+    lastArbBlockNum: uint,
+    nextSendTimestamp: uint,
 };
 
 var logsQueuedForEndOfBlock: Queue;
 
 public impure func outputStats_endOfBlock(arbBlockNum: uint, ethBlockNum: uint, timestamp: uint) {
-    if ((inbox_currentTimestamp() >= globalBlockReceiptData.nextSendTime) && !outbox_isEmpty() ){
+    if ((inbox_currentTimestamp() >= globalBlockReceiptData.nextSendTimestamp) && !outbox_isEmpty() ){
         outbox_send();
-        globalBlockReceiptData = globalBlockReceiptData with {
-            nextSendTime: inbox_currentTimestamp() + chainParams_getSecondsPerSend()
-        };
+        set globalBlockReceiptData.nextSendTimestamp = inbox_currentTimestamp() + chainParams_getSecondsPerSend();
     }
 
     // add current block (including soon-to-be-issued block summary log) into total stats
@@ -106,20 +104,15 @@ public impure func outputStats_endOfBlock(arbBlockNum: uint, ethBlockNum: uint, 
         globalBlockReceiptData.statsThisBlock,
         globalBlockReceiptData.statsAllTime
     );
-    updatedStats = updatedStats with {
-        numLogs: updatedStats.numLogs + 1  // +1 for soon-to-be-issued block summary log
-    };
+    set updatedStats.numLogs = updatedStats.numLogs + 1;  // +1 for soon-to-be-issued block summary log
 
-    globalBlockReceiptData = globalBlockReceiptData with {
-        statsAllTime: updatedStats
-    };
+    set globalBlockReceiptData.statsAllTime = updatedStats;
 
     let q = logsQueuedForEndOfBlock;
     while( ! queue_isEmpty(q) ){
         if let Some(res) = queue_get(q) {
-            let (uq, logItem) = res;
-            q = uq;
-            asm(logItem,) { log };
+            let (*q, logItem) = res;
+            asm(logItem) { log };
         } else {
             // should never happen
             q = queue_new();
@@ -134,54 +127,38 @@ public impure func outputStats_endOfBlock(arbBlockNum: uint, ethBlockNum: uint, 
         globalBlockReceiptData.statsThisBlock,
         globalBlockReceiptData.statsAllTime,
         gasAccounting_summaryToPublish(),
-        globalBlockReceiptData.lastBlockNum,
+        globalBlockReceiptData.lastArbBlockNum,
         ethBlockNum,
-    ),) { log }; 
+    )) { log }; 
 
-    globalBlockReceiptData = globalBlockReceiptData with {
-        lastBlockNum: arbBlockNum
-    };
+    set globalBlockReceiptData.lastArbBlockNum = arbBlockNum;
 
     // now clear current block stats, because we're advancing to a new current block
-    globalBlockReceiptData = globalBlockReceiptData with {
-        statsThisBlock: outputStats_new()
-    } with {
-        data: struct {
-            totalGasUsed: 0,
-            numTx: 0,
-            numEvmLogs: 0
-        }
+    set globalBlockReceiptData.statsThisBlock = outputStats_new();
+    set globalBlockReceiptData.data = struct {
+        totalGasUsed: 0,
+        numTx: 0,
+        numEvmLogs: 0
     };
 }
 
 impure func outputStats_addTxLog(gasUsed: uint, numEvmLogs: uint) {
-    globalBlockReceiptData = globalBlockReceiptData with {
-        statsThisBlock: globalBlockReceiptData.statsThisBlock with {
-            numTx: 1 + globalBlockReceiptData.statsThisBlock.numTx
-        } with {
-            numLogs: 1 + globalBlockReceiptData.statsThisBlock.numLogs
-        } with {
-            totalGasUsed: gasUsed + globalBlockReceiptData.statsThisBlock.totalGasUsed
-        } with {
-            numEvmLogs: numEvmLogs + globalBlockReceiptData.statsThisBlock.numEvmLogs
-        }
-    };
+    let stats = globalBlockReceiptData.statsThisBlock;
+
+    set stats.numTx = 1 + stats.numTx;
+    set stats.numLogs = 1 + stats.numLogs;
+    set stats.totalGasUsed = gasUsed + stats.totalGasUsed;
+    set stats.numEvmLogs = numEvmLogs + stats.numEvmLogs;
+
+    set globalBlockReceiptData.statsThisBlock = stats;
 }
 
 impure func outputStats_addNonTxLog() {
-    globalBlockReceiptData = globalBlockReceiptData with {
-        statsThisBlock: globalBlockReceiptData.statsThisBlock with {
-            numLogs: 1 + globalBlockReceiptData.statsThisBlock.numLogs
-        }
-    };
+    set globalBlockReceiptData.statsThisBlock.numLogs = 1 + globalBlockReceiptData.statsThisBlock.numLogs;
 }
 
 impure func outputStats_addSend() {
-    globalBlockReceiptData = globalBlockReceiptData with {
-        statsThisBlock: globalBlockReceiptData.statsThisBlock with {
-            numSends: 1 + globalBlockReceiptData.statsThisBlock.numSends
-        }
-    };
+    set globalBlockReceiptData.statsThisBlock.numSends = 1 + globalBlockReceiptData.statsThisBlock.numSends;
 }
 
 public impure func txReceipts_init() {  // will be called at beginning of main()
@@ -193,8 +170,8 @@ public impure func txReceipts_init() {  // will be called at beginning of main()
         },
         statsThisBlock: outputStats_new(),
         statsAllTime: outputStats_new(),
-        lastBlockNum: ~0,
-        nextSendTime: 0,
+        lastArbBlockNum: ~0,
+        nextSendTimestamp: 0,
     };
 }
 
@@ -203,18 +180,14 @@ impure func update_txReceiptsForBlock(
     numEvmLogs: uint
 ) -> PerBlockReceiptData {
     // first add in the gas, because returned value is supposed to include it
-    let ret = globalBlockReceiptData.data with {
-        totalGasUsed: gasUsed + globalBlockReceiptData.data.totalGasUsed
-    };
+    set globalBlockReceiptData.data.totalGasUsed = gasUsed + globalBlockReceiptData.data.totalGasUsed;
 
-    // now update the accumulated data and write it back, but don't return the updated version
-    globalBlockReceiptData = globalBlockReceiptData with {
-        data: ret with {
-            numTx: ret.numTx + 1
-        } with {
-            numEvmLogs: ret.numEvmLogs + numEvmLogs
-        }
-    };
+    // save the value that we will return
+    let ret = globalBlockReceiptData.data;
+
+    // now do the updates that we're not supposed to include in the return data
+    set globalBlockReceiptData.data.numTx = 1 + globalBlockReceiptData.data.numTx;
+    set globalBlockReceiptData.data.numEvmLogs = numEvmLogs + globalBlockReceiptData.data.numEvmLogs;
 
     return ret;
 }
@@ -230,27 +203,28 @@ public impure func emitTxReceipt(
 ) {
     arbStatistics_addTxReceipt();
 
-    let realGasUsage = struct {
-        gasUsed: 0,
-        gasPriceWei: 0,
+    let realGasUsage = xif let Some(gu) = gasUsage {
+        gu
+    } else {
+        struct {
+            gasUsed: 0,
+            gasPriceWei: 0,
+        }
     };
-    if let Some(gu) = gasUsage {
-        realGasUsage = gu;
-    }
 
-    let evmLogs = evmlogs_empty();
-    let numEvmLogs = 0;
-    if let Some(el) = maybeEvmLogs {
-        evmLogs = el;
-        numEvmLogs = evmlogs_numLogs(el);
-    }
+    let (evmLogs, numEvmLogs) = xif let Some(el) = maybeEvmLogs {
+        (el, evmlogs_numLogs(el))
+    } else {
+        (evmlogs_empty(), 0)
+    };
 
     outputStats_addTxLog(realGasUsage.gasUsed, numEvmLogs);
 
-    let returnData = bytearray_new(0);
-    if let Some(rd) = maybeReturnData {
-        returnData = rd;
-    }
+    let returnData = xif let Some(rd) = maybeReturnData {
+        rd
+    } else {
+        bytearray_new(0)
+    };
 
     let txResultInfo = struct {
         returnCode: resultCode,
@@ -265,7 +239,7 @@ public impure func emitTxReceipt(
     asm((
         const::LogType_txReceipt,
         l1message with {
-            msgData: unsafecast<ByteArray>(bytearray_toSizeAndBuffer(l1message.msgData))  // because caller expects marshalled bytes
+            msgData: unsafecast<ByteArray>(bytearray_toSizeAndBuffer(l1message.msgData))  // because the L1 expects this format
         },
         txResultInfo,
         realGasUsage,
@@ -274,9 +248,13 @@ public impure func emitTxReceipt(
             numEvmLogs,
         ),
         feeStats,
-    ),) { log };
+    )) { log };
 }
 
+// The globalOutbox queues a sequence of outgoing messages that ArbOS wants to emit as sends.
+// For efficiency, we don't do a send for each individual message. Instead, we emit each message as a log, and
+//       add the message to the next batch. Periodically do a send that emits a summary of the current batch
+//       (including a merkle root of the messages in the batch).
 var globalOutbox: struct {
     batch: MerkleTreeBuilder,
     batchNumber: uint,
@@ -298,7 +276,7 @@ public impure func outbox_getEvmTracer() -> EvmTracer {
 }
 
 public impure func outbox_setEvmTracer(tracer: EvmTracer) {
-    globalOutbox = globalOutbox with { evmTracer: tracer };
+    set globalOutbox.evmTracer = tracer;
 }
 
 impure func outbox_isEmpty() -> bool {
@@ -308,11 +286,10 @@ impure func outbox_isEmpty() -> bool {
 public impure func outbox_append(item: ByteArray) {
     let batchNumber = globalOutbox.batchNumber;
     let numInBatch = globalOutbox.numInBatch;
-    globalOutbox = globalOutbox with {
-        numInBatch: numInBatch + 1
-    } with {
-        batch: merkleTreeBuilder_add(globalOutbox.batch, item)
-    };
+
+    set globalOutbox.numInBatch = 1 + numInBatch;
+    set globalOutbox.batch = merkleTreeBuilder_add(globalOutbox.batch, item);
+
     let (size, buf) = bytearray_toSizeAndBuffer(item);
     logsQueuedForEndOfBlock = queue_put(
         logsQueuedForEndOfBlock,
@@ -321,13 +298,21 @@ public impure func outbox_append(item: ByteArray) {
     outputStats_addNonTxLog();
 }
 
-impure func outbox_send() {
+impure func outbox_send() {  // emit a send to summarize the current batch, then get ready for the next batch
     let (tree, rootHash) = merkleTreeBuilder_finish(globalOutbox.batch);
+
+    // queue a log that includes the whole batch
     logsQueuedForEndOfBlock = queue_put(
         logsQueuedForEndOfBlock,
         (const::LogType_sendMerkleTree, globalOutbox.batchNumber, globalOutbox.numInBatch, tree),
     );
     outputStats_addNonTxLog();
+
+    // send the batch summary, using the prescribed format:
+    //        send type (1 byte)
+    //        batch number (32 bytes)
+    //        num messages in batch (32 bytes)
+    //        root merkle hash of messages in batch
     asm(
         97,
         setbuffer256(
@@ -346,6 +331,8 @@ impure func outbox_send() {
         )
     ) { send };
     outputStats_addSend();
+
+    // set up the globalOutbox for the next batch
     globalOutbox = struct {
         batch: merkleTreeBuilder_new(),
         batchNumber: globalOutbox.batchNumber + 1,
@@ -362,8 +349,7 @@ public impure func sendQueuedMessages(queue: Queue, evmLogs: EvmLogs) -> EvmLogs
     let sendTxIndexQ = queue_new();
     return xloop {
         if let Some(res) = queue_get(queue) {
-            let (uq, rawMsg) = res;
-            queue = uq;
+            let (*queue, rawMsg) = res;
             let msg = unsafecast<ByteArray>(rawMsg);
             if (bytearray_getByte(unsafecast<ByteArray>(msg), 0) == const::SendType_sendTxToL1) {
                 sendTxIndexQ = queue_put(sendTxIndexQ, globalOutbox.numInBatch);
@@ -379,7 +365,7 @@ public impure func sendQueuedMessages(queue: Queue, evmLogs: EvmLogs) -> EvmLogs
     };
 }
 
-type LogWith4Topics = struct {
+type LogWith4Topics = struct {  // the structure that ArbOS uses to represent (and emit) an EVM log with 4 topics
     sender: address,
     data: struct {
         size: uint,
@@ -394,29 +380,25 @@ type LogWith4Topics = struct {
 impure func updateEvmLogForSendToL1(rawLog: any, state: any) -> (any, any) {
     // This is designed to be used by evmlogs_forall. When used by evmlogs_forall in its pass through
     //      the current set of logs, this morphs EVM logs with topic[0] == const::EVMLogTopicPlaceHolderForL2ToL1Send
-    //      into proper EVM log items with batch-related fields filled in
+    //      into proper EVM log items with batch-related fields filled in.
 
     // Cast the log item to a struct that assumes 4 topics. The topics might not exist,
     //      but that's OK because we won't try to access them until after we have verified that they exist.
     let log = unsafecast<LogWith4Topics>(rawLog);
-    return xif ((asm(log,) uint { tlen } == 6) && (log.topic0 == const::eventTopic_ArbSys_L2ToL1Transaction)) {
+    return xif ((asm(log) uint { tlen } == 6) && (log.topic0 == const::eventTopic_ArbSys_L2ToL1Transaction)) {
         // Now we know that the log has 4 topics.
         xif let Some(res) = queue_get(unsafecast<Queue>(state)) {
-            let (uq, item) = res;
-            log = log with {
-                topic3: globalOutbox.batchNumber
-            } with {
-                data: log.data with { buf: setbuffer256(log.data.buf, 32, unsafecast<uint>(item)) }
-            };
-            (log, uq)
+            let (q, item) = res;
+            set log.topic3 = globalOutbox.batchNumber;
+            set log.data.buf = setbuffer256(log.data.buf, 32, unsafecast<uint>(item));
+            (log, q)
         } else {
             // This should never happen, but if it does, get everything right except for the index in batch.
-            log = log with {
-                topic2: globalOutbox.batchNumber
-            };
+            set log.topic2 = globalOutbox.batchNumber;
             (log, state)
         }
     } else {
+        // The log doesn't have 4 topics, so we don't need to do anything to it.
         (rawLog, state)
     };
 }

@@ -86,9 +86,9 @@ public func marshalledBytes_hash(mb: MarshalledBytes) -> bytes32 {
     // It is collision-free, assuming that the underlying hash operation is collision-free.
 
     let ret = bytes32(mb.nbytes);
-    let x = unsafecast<any>(mb.contents);
-    while(x != ()) {
-        let cell = unsafecast<MarshalledBytesCell>(x);
+    let x = mb.contents;
+    while(cast<any>(x) != ()) {
+        let cell = x;
         ret = hash(ret, bytes32(cell.first));
         x = cell.rest;
     }
@@ -184,22 +184,21 @@ public func bytearray_get64(ba: ByteArray, offset: uint) -> uint {
 
 // bytearray_get256 reads a chunk of 32 bytes from a ByteArray
 public func bytearray_get256(ba: ByteArray, offset: uint) -> uint {
-    if (offset >= ba.size) {
-        return 0;
-    }
-    if (offset+32 > ba.size) {
+    return xif (offset >= ba.size) {
+        0
+    } elseif (offset+32 > ba.size) {
         let bytesToRead = ba.size-offset;
         offset = offset + ba.sliceOffset;
-        if (offset + bytesToRead >= 32) {
+        xif (offset + bytesToRead >= 32) {
             let mask = (1 << (8*bytesToRead)) - 1;
-            return (mask & getbuffer256(ba.contents, offset+bytesToRead-32)) << (8*(32-bytesToRead));
+            (mask & getbuffer256(ba.contents, offset+bytesToRead-32)) << (8*(32-bytesToRead))
         } else {
-            return (getbuffer256(ba.contents, offset) >> (256-8*bytesToRead)) << (256-8*bytesToRead);
+            (getbuffer256(ba.contents, offset) >> (256-8*bytesToRead)) << (256-8*bytesToRead)
         }
-    }
-    offset = offset + ba.sliceOffset;
-    let res = getbuffer256(ba.contents, offset);
-    return res;
+    } else {
+        offset = offset + ba.sliceOffset;
+        getbuffer256(ba.contents, offset)
+    };
 }
 
 func make(cont: ByteArray) -> ByteArray {

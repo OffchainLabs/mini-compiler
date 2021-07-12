@@ -10,7 +10,6 @@ use std::safeMath::safeAdd;
 use std::safeMath::safeSub;
 use std::safeMath::safeMul;
 
-
 type FixedPoint = struct {
     val: uint,
     shiftFactor: uint,

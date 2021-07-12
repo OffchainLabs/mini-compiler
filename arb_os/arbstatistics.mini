@@ -43,7 +43,8 @@ public impure func arbStatistics_txcall() {
     }
 }
 
-impure func arbStatistics_getStats(_topFrame: EvmCallFrame, calldata: ByteArray) {  // (txId)
+// function getStats() external view returns(uint, uint, uint, uint, uint, uint);
+impure func arbStatistics_getStats(_topFrame: EvmCallFrame, calldata: ByteArray) {
     if (bytearray_size(calldata) != 4) {
         evmOp_revert_knownPc(10, 0, 0);
     }

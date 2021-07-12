@@ -48,24 +48,24 @@ impure func fetchAndIncrSequenceNum(addr: address) -> uint {
 }
 
 type TxRequestData = struct {
-    maxGas: uint,
-    gasPrice: uint,
-    seqNum: option<uint>,
+    maxGas: uint,                           // max gas amount remaining from original request
+    gasPrice: uint,                         // max gas price sender is willing to pay
+    seqNum: option<uint>,                   // sequence number, or None if tx doesn't have one
     caller: address,
     calleeAddr: address,
-    gasPayer: address,
-    value: uint,
+    gasPayer: address,                      // who is paying for gas for this tx
+    value: uint,                            // ETH amount passed with call
     calldata: ByteArray,
     nonMutating: bool,
     isConstructor: bool,
-    incomingRequest: IncomingRequest,
-    feeStats: TxFeeStats,
-    fromRetryable: option<RetryableTx>,
+    incomingRequest: IncomingRequest,       // original request that led to this; used for making tx receipt
+    feeStats: TxFeeStats,                   // info about the fees paid by this tx
+    fromRetryable: option<RetryableTx>,     // if this is redeeming a retryable, this references the retryable
 }
 
-public impure func processL2Request(
-    request: TxRequestData
-) -> option<()> {   // return None if message is malformatted; otherwise handle errors and return Some(()); if no error, never return
+// Process a request.
+// Return None if message is malformatted; otherwise handle errors and return Some(()); if no error, never return
+public impure func processL2Request(request: TxRequestData) -> option<()> {
     if let Some(sequenceNum) = request.seqNum {
         let expectedSeqNum = account_getNextSeqNum(accountStore_get(safeGetGlobalAccountStore(), request.caller));
         if (sequenceNum != expectedSeqNum) {
@@ -104,15 +104,14 @@ public impure func processL2Request(
         }
 
         let codeBytes = request.calldata;
-        request = request with { calldata: bytearray_new(0) };
+        set request.calldata = bytearray_new(0);
 
         if (request.seqNum == None<uint>) {
-            request = request with { seqNum: Some(fetchAndIncrSequenceNum(request.caller)) };
+            // constructor always increments the caller's sequence number
+            set request.seqNum = Some(fetchAndIncrSequenceNum(request.caller));
         }
 
-        request = request with {
-            calleeAddr: address(keccakOfRlpEncodedUintPair(uint(request.caller), request.seqNum?))
-        };
+        set request.calleeAddr = address(keccakOfRlpEncodedUintPair(uint(request.caller), request.seqNum?));
 
         if (account_hasContract(accountStore_get(safeGetGlobalAccountStore(), request.calleeAddr))) {
             // there's already an account at that address, revert the call
@@ -132,17 +131,20 @@ public impure func processL2Request(
                 codeBytes,
                 request,
                 None<uint>,
-            );  // should never return
+            );
+            //NOTREACHED
         }
     } else {
         // this is a non-constructor call
-        let callKind = const::EVMCallType_call;
-        if (request.nonMutating) {
-            callKind = const::EVMCallType_staticcall;
-        }
+        let callKind = xif (request.nonMutating) {
+            const::EVMCallType_staticcall
+        } else {
+            const::EVMCallType_call
+        };
 
         initEvmCallStack(callKind, request, None<ByteArray>, None<uint>);  // should never return
     }
 
-    return error;   // this should never be reached
+    //NOTREACHED
+    return error;
 }

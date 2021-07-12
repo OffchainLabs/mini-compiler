@@ -11,7 +11,7 @@ use evmCallStack::evmCallStack_stackInfo;
 use inbox::mainRunLoop;
 
 
-var inErrorHandler: bool;
+var inErrorHandler: bool;  // tracks when we're in an error handler, to detect recursive errors
 
 public impure func errorHandler_init() {
     inErrorHandler = false;
@@ -21,46 +21,45 @@ public impure func errorHandler_init() {
     let stub = asm() func() { errcodept };
     let jumpErrHandler = asm(0x34, errorHandler, stub) func() { pushinsnimm };
     let pushAndJump = asm(0x3b, 0, jumpErrHandler) func() { pushinsnimm };
-    asm(pushAndJump,) { errset };
+    asm(pushAndJump) { errset };
 }
 
 public impure func errorHandler() {
     // If we got here, it's because either:
     // 1.  some AVM instruction hit an Error, which could happen for several reasons
     //   A.  untrusted application code tried to do something erroneous, like dividing by zero
-    //   B.  untrusted application code ran out of ArbGas
-    //   C.  we hit an unknown bug in the runtime
-    // 2.  some "impossible thing" happened, and ArbOS error handling code decided to jump here
+    //   B.  untrusted application code ran out of AVM gas
+    //   C.  we hit an unknown bug in ArbOS
+    // 2.  some "impossible thing" happened, and ArbOS error handling code jumped here as a last resort
     // In either case, we want to clean up as best we can, and carry on.
 
-    // Note that if an application hits an error when its ArbGas remaining is just barely above zero,
-    //      we could run out of ArbGas while we're running this handler or cleaning up the application's state.
-    // If that happens, we'll get thrown back to this error handler again, but with ArbGas set to MaxUint256.
-    // When we re-enter this handler, it will look like the application ran out of ArbGas.
-    // That's OK, because the only "harm" done is that the double-error situation of application error plus ArbGas underflow
-    //      gets detected as just an ArbGas underflow.  The effect on the application will be the same either way.
-
+    // Note that if an application hits an error when its AVM gas remaining is just barely above zero,
+    //      we could run out of AVM gas while we're running this handler or cleaning up the application's state.
+    // If that happens, we'll get thrown back to this error handler again, but with AVM gas set to MaxUint256.
+    // When we re-enter this handler, it will look like the application ran out of gas.
+    // That's OK, because the only "harm" done is that the double-error situation of application error plus gas underflow
+    //      gets detected as just a gas underflow.  The effect on the application will be the same either way.
 
     if (inErrorHandler) {
-        asm(666,) { debugprint };
+        debug(666);
     } else {
         inErrorHandler = true;
         if (getGas() > (~0 - 500)) {
-            // application ran out of ArbGas
+            // application ran out of gas
             // duplicate stackInfo call inside both arms of loop, to make sure it happens after the gas check
             let (txid, addrs, parentAddrs) = evmCallStack_stackInfo();
-            asm((665, txid, addrs, parentAddrs),) { debugprint };
+            debug((665, txid, addrs, parentAddrs)) ;
         } else {
             // some other error
             let (txid, addrs, parentAddrs) = evmCallStack_stackInfo();
-            asm((666, txid, addrs, parentAddrs),) { debugprint };
+            debug((666, txid, addrs, parentAddrs));
         }
     }
 
     if (evmCallStack_isEmpty()) {
-        // Oh no, we must have hit an unexpected error in the runtime.
+        // Oh no, we must have hit an unexpected error in ArbOS.
         // That shouldn't have happened, but we have to make the best of the situation.
-        // So we'll clean up our stacks, and jump back to the main runloop.
+        // So we'll clean up our stacks, then jump back to the main run loop.
         emptyAvmStack();
         inErrorHandler = false;
         cleanAvmAuxStackAndCall(mainRunLoop, true);  // this will never return

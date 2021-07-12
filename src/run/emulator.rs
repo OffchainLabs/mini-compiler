@@ -15,12 +15,12 @@ use crate::uint256::Uint256;
 use clap::Clap;
 use ethers_core::types::{Signature, H256};
 use std::cmp::{max, Ordering};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 const MAX_PAIRING_SIZE: u64 = 30;
@@ -260,7 +260,7 @@ impl MachineState {
 
 ///Holds AVM bytecode in a list of segments, the runtime is held on segment 0.
 #[derive(Debug)]
-struct CodeStore {
+pub struct CodeStore {
     segments: Vec<Vec<Instruction<AVMOpcode>>>,
 }
 
@@ -720,7 +720,7 @@ pub struct Machine {
     stack: ValueStack,
     aux_stack: ValueStack,
     pub state: MachineState,
-    code: CodeStore,
+    pub code: CodeStore,
     static_val: Value,
     pub register: Value,
     err_codepoint: CodePt,
@@ -729,6 +729,7 @@ pub struct Machine {
     file_info_chart: BTreeMap<u64, FileInfo>,
     total_gas_usage: Uint256,
     trace_writer: Option<BufWriter<File>>,
+    coverage: Option<HashSet<usize>>,
 }
 
 impl Machine {
@@ -746,6 +747,7 @@ impl Machine {
             file_info_chart: program.file_info_chart,
             total_gas_usage: Uint256::zero(),
             trace_writer: None,
+            coverage: None,
         }
     }
 
@@ -756,8 +758,11 @@ impl Machine {
 
     ///Pushes 0 to the stack and sets the program counter to the first instruction. Used by the EVM
     /// compiler.
-    pub fn start_at_zero(&mut self) {
+    pub fn start_at_zero(&mut self, start_coverage: bool) {
         self.state = MachineState::Running(CodePt::Internal(0));
+        if start_coverage {
+            self.start_coverage();
+        }
     }
 
     ///Returns a stack trace of the current state of the machine.
@@ -861,6 +866,10 @@ impl Machine {
         } else {
             None
         }
+    }
+
+    pub fn start_coverage(&mut self) {
+        self.coverage = Some(HashSet::new());
     }
 
     ///Starts the debugger, execution will end when the program counter of self reaches stop_pc, or
@@ -1021,6 +1030,14 @@ impl Machine {
                     if pc == spc {
                         return gas_used;
                     }
+                }
+            }
+            if let CodePt::Internal(pc) = self.get_pc().unwrap() {
+                match self.coverage.iter_mut().next() {
+                    Some(cov_set) => {
+                        cov_set.insert(pc);
+                    }
+                    None => {}
                 }
             }
             let gas_this_instruction = if let Some(gas) = self.next_op_gas() {
@@ -2242,6 +2259,28 @@ impl Machine {
                 &self.state,
                 None,
             ))
+        }
+    }
+
+    pub fn write_coverage(&self, name: String) {
+        let data = match &self.coverage {
+            Some(coverage) => coverage,
+            None => return,
+        };
+
+        let mut coverage_file =
+            File::create(PathBuf::from("coverage/").join(name.clone() + ".cov"))
+                .expect(&format!("Could not create coverage for {}", name));
+
+        for (index, insn) in self.code.segments.iter().flatten().enumerate() {
+            if let Some(loc) = insn.debug_info.location {
+                if let Some(info) = self.file_info_chart.get(&loc.file_id) {
+                    match data.contains(&index) {
+                        true => drop(writeln!(coverage_file, "+ {} {}", info.name, loc.line)),
+                        false => drop(writeln!(coverage_file, "- {} {}", info.name, loc.line)),
+                    }
+                }
+            }
         }
     }
 }

@@ -1,0 +1,98 @@
+//
+// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+//
+
+use evmCallStack::EvmCallFrame;
+use std::bytearray::ByteArray;
+
+use chainParameters::chainParams_chainId;
+
+use evmCallStack::evmCallStack_stackDepth;
+use evmCallStack::evmCallStack_topFrame;
+use evmCallStack::evmCallStack_setAccount;
+use evmCallStack::evmCallStack_getTopFrameMemoryOrDie;
+use evmCallStack::evmCallStack_setTopFrameMemory;
+use evmCallStack::evmCallStack_callHitError;
+
+use evmCallStack::evmCallFrame_getCalldata;
+use evmCallStack::evmCallFrame_getAccount;
+use evmCallStack::evmCallFrame_getCaller;
+
+use evmOps::evmOp_return;
+use evmOps::evmOp_revert_knownCodePc;
+
+use accounts::account_setBlsKey;
+use accounts::account_getBlsKey;
+
+use std::bytearray::bytearray_size;
+use std::bytearray::bytearray_get256;
+
+use std::bls::bls_makeKey;
+use std::bls::bls_marshalPublicKey;
+
+
+public impure func arbBLS_txcall() {
+    if let Some(topFrame) = evmCallStack_topFrame() {
+        let calldata = evmCallFrame_getCalldata(topFrame);
+        if (bytearray_size(calldata) < 4) {
+            evmOp_revert_knownCodePc(address(const::Address_ArbBLS), 0, 0, 0);
+        }
+        let funcCode = getFuncCode(calldata);
+        if (funcCode == 0x375a7c7f) {
+            arbBLS_register(topFrame, calldata);
+        } elseif(funcCode == 0x857cdbb8) {
+            arbBLS_getPublicKey(topFrame, calldata);
+        } else {
+            // unrecognized function code
+            evmOp_revert_knownCodePc(address(const::Address_ArbBLS), 1, 0, 0);
+        }
+    } else {
+        // this shouldn't happen -- should always be called in an EVM tx
+        evmCallStack_callHitError(18);
+    }
+}
+
+func getFuncCode(ba: ByteArray) -> uint {
+    return (bytearray_get256(ba, 0) >> 224);
+}
+
+impure func arbBLS_register(topFrame: EvmCallFrame, calldata: ByteArray) {
+    if (bytearray_size(calldata) != 4+32*4) {
+        evmOp_revert_knownCodePc(address(const::Address_ArbBLS), 170, 0, 0);
+    }
+
+    let x0 = bytearray_get256(calldata, 4);
+    let x1 = bytearray_get256(calldata, 4+32);
+    let y0 = bytearray_get256(calldata, 4+32*2);
+    let y1 = bytearray_get256(calldata, 4+32*3);
+    let maybeBlsKey = bls_makeKey(x0, x1, y0, y1);
+
+    let caller = evmCallFrame_getCaller(topFrame);
+    let acct = evmCallFrame_getAccount(topFrame, caller);
+    if (evmCallStack_setAccount(caller, account_setBlsKey(acct, maybeBlsKey))) {
+        evmOp_return(0, 0);
+    } else {
+        evmOp_revert_knownCodePc(address(const::Address_ArbBLS), 171, 0, 0);
+    }
+}
+
+impure func arbBLS_getPublicKey(topFrame: EvmCallFrame, calldata: ByteArray) { // (address) -> (uint, uint, uint, uint)
+    if (bytearray_size(calldata) != 36) {
+        evmOp_revert_knownCodePc(address(const::Address_ArbBLS), 180, 0, 0);
+    }
+    let addr = address(bytearray_get256(calldata, 4));
+    let maybeBlsKey = account_getBlsKey(evmCallFrame_getAccount(topFrame, addr));
+
+    let mem = evmCallStack_getTopFrameMemoryOrDie();
+    if let Some(blsKey) = maybeBlsKey {
+        mem = bls_marshalPublicKey(blsKey, mem, 0);
+    } else {
+        evmOp_revert_knownCodePc(address(const::Address_ArbBLS), 101, 0, 0);
+    }
+
+    if (evmCallStack_setTopFrameMemory(mem)) {
+        evmOp_return(0, 4*32);
+    } else {
+        evmOp_revert_knownCodePc(address(const::Address_ArbBLS), 182, 0, 0);
+    }
+}

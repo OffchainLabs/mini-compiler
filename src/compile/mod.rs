@@ -1221,8 +1221,6 @@ pub fn parse_from_source(
     used_constants: &mut HashSet<String>,
     error_system: &mut ErrorSystem,
 ) -> Result<Vec<TopLevelDecl>, CompileError> {
-    let comment_re = regex::Regex::new(r"//.*").unwrap();
-    let source = comment_re.replace_all(&source, "");
     let lines = Lines::new(source.bytes());
     let mut constants = init_constant_table(constants_path)?;
     let mut local_constants = HashMap::<String, Location>::new();

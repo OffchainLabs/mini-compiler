@@ -39,7 +39,7 @@ func shrinkToFit(x: []uint) -> []uint {
         let ret = newarray<uint>(reducedSize);
         while(reducedSize > 0) {
             reducedSize = reducedSize-1;
-            ret = ret with { [reducedSize] = x[reducedSize] };
+            set ret[reducedSize] = x[reducedSize];
         }
         ret
     } else {
@@ -52,7 +52,7 @@ func shiftPowerOfDigit(x: []uint, n: uint) -> []uint {
     let i = len(x);
     while(i > 0) {
         i = i-1;
-        ret = ret with { [i+n] = x[i] };
+        set ret[i+n] = x[i];
     }
     return ret;
 }
@@ -69,7 +69,7 @@ public func biguint_fromUint(x: uint) -> []uint {
     let ret = newarray<uint>(4);  // assume this will be big enough
     let i = 0;
     while(x > 0) {
-        ret = ret with { [i] = modDigit(x) };
+        set ret[i] = modDigit(x);
         x = divDigit(x);
         i = i+1;
     }
@@ -91,7 +91,7 @@ public func biguint_fromBytes(ba: ByteArray) -> []uint {
             acc = acc * 256 + bytearray_getByte(ba, nbytes - 10*w - (bytesInThisWord-i));
             i = i+1;
         }
-        ret = ret with { [w] = acc };
+        set ret[w] = acc;
         w = w+1;
     }
 
@@ -109,12 +109,11 @@ public func biguint_toBytes(x: []uint) -> ByteArray {
         ret = bytearray_set256(ret, 10*((ndigits-1)-digit), x[digit] << (256-80));
     }
 
-    if ((nbytes%10) == 0) {
-        ret = bytearray_extract(ret, 0, nbytes);
+    return xif ((nbytes%10) == 0) {
+        bytearray_extract(ret, 0, nbytes)
     } else {
-        ret = bytearray_extract(ret, 10-(nbytes%10), nbytes);
-    }
-    return ret;
+        bytearray_extract(ret, 10-(nbytes%10), nbytes)
+    };
 }
 
 public func biguint_sizeBytes(x: []uint) -> uint {
@@ -173,9 +172,8 @@ public func biguint_random(nwords: uint, gen: RandomGenerator) -> ([]uint, Rando
     let ret = newarray<uint>(nwords);
     while(nwords > 0) {
         nwords = nwords - 1;
-        let (ugen, val) = random_next(gen);
-        gen = ugen;
-        ret = ret with { [nwords] = modDigit(uint(val)) };
+        let (*gen, val) = random_next(gen);
+        set ret[nwords] = modDigit(uint(val));
     }
     return (ret, gen);
 }
@@ -228,9 +226,11 @@ public func biguint_equal(x: []uint, y: []uint) -> bool {
 }
 
 public func biguint_getBit(x: []uint, bnum: uint) -> uint {
-    if (bnum >= 80*len(x)) {    return 0;    }
-
-    return (x[bnum/80] >> (bnum%80)) & 1;
+    return xif (bnum >= 80*len(x)) {
+        0
+    } else {
+        (x[bnum/80] >> (bnum%80)) & 1
+    };
 }
 
 public func biguint_shiftLeft(x: []uint, n: uint) -> []uint {
@@ -247,12 +247,12 @@ public func biguint_shiftLeft(x: []uint, n: uint) -> []uint {
     let carry = 0;
     while(i < numWordsBefore) {
         carry = carry + (x[i] << bitsToShift);
-        ret = ret with { [i+wordsToShift] = modDigit(carry) };
+        set ret[i+wordsToShift] = modDigit(carry);
         carry = divDigit(carry);
         i = i+1;
     }
     if (carry > 0) {
-        ret = ret with { [numWordsBefore+wordsToShift] = carry };
+        set ret[numWordsBefore+wordsToShift] = carry;
     }
     return ret;
 }
@@ -270,7 +270,7 @@ public func biguint_shiftRight(x: []uint, n: uint) -> []uint {
     let ret = newarray<uint>(numWordsAfter);
     let i = 0;
     while(i < numWordsAfter) {
-        ret = ret with { [i] = x[i+digitsToShift] };
+        set ret[i] = x[i+digitsToShift];
         i = i+1;
     }
     return ret;
@@ -295,12 +295,13 @@ public func biguint_add(x: []uint, y: []uint) -> []uint {
         if (i < ySize) {
             carry = carry + y[i];
         }
-        ret = ret with { [i] = modDigit(carry) };
+        set ret[i] = modDigit(carry);
         carry = divDigit(carry);
         i = i + 1;
     }
 
-    return ret with { [xSize] = carry };
+    set ret[xSize] = carry;
+    return ret;
 }
 
 public func biguint_subtract(x: []uint, y: []uint) -> option<[]uint> {
@@ -321,10 +322,10 @@ public func biguint_subtract(x: []uint, y: []uint) -> option<[]uint> {
                 t = t - int(y[i]);
             }
             if(t >= int(0)) {
-                ret = ret with { [i] = uint(t) };
+                set ret[i] = uint(t);
                 carry = int(0);
             } else {
-                ret = ret with { [i] = uint(t)+mulDigit(1) };
+                set ret[i] = uint(t)+mulDigit(1);
                 carry = -int(1);
             }
             i = i+1;
@@ -346,10 +347,10 @@ public func biguint_mul(x: []uint, y: []uint) -> []uint {
         while(j <= n) {
             let uv = ret[i+j] + x[j]*y[i] + carry;
             carry = divDigit(uv);
-            ret = ret with { [i+j] = modDigit(uv) };
+            set ret[i+j] = modDigit(uv);
             j = j+1;
         }
-        ret = ret with { [i+n+1] = carry };
+        set ret[i+n+1] = carry;
         i = i+1;
     }
 
@@ -363,11 +364,11 @@ public func biguint_shortMul(x: []uint, y: uint) -> []uint {
     let i = 0;
     while(i < xSize) {
         carry = x[i] * y + carry;
-        ret = ret with { [i] = modDigit(carry) };
+        set ret[i] = modDigit(carry);
         carry = divDigit(carry);
         i = i+1;
     }
-    ret = ret with { [xSize] = carry };
+    set ret[xSize] = carry;
     return ret;
 }
 
@@ -380,16 +381,16 @@ public func biguint_square(x: []uint) -> []uint {
     while(i < t) {
         let xi = x[i];
         let uv = ret[2*i] + xi*xi;
-        ret = ret with { [2*i] = modDigit(uv) };
+        set ret[2*i] = modDigit(uv);
         let c = divDigit(uv);
         let j = i+1;
         while(j < t) {
             uv = ret[i+j] + 2*x[j]*xi + c;
-            ret = ret with { [i+j] = modDigit(uv) };
+            set ret[i+j] = modDigit(uv);
             c = divDigit(uv);
             j = j+1;
         }
-        ret = ret with { [i+t] = c };
+        set ret[i+t] = c;
         i = i+1;
     }
 
@@ -423,7 +424,7 @@ public func biguint_divmod(x: []uint, y: []uint) -> option<([]uint, []uint)> {
 
     let ybnt = shiftPowerOfDigit(y, sizeDiff);
     while(biguint_compare(x, ybnt) >= int(0)) {
-        q = q with { [sizeDiff] = 1 + q[sizeDiff] };
+        set q[sizeDiff] = 1 + q[sizeDiff];
         if let Some(diff) = biguint_subtract(x, ybnt) {
             x = diff;
         } else {
@@ -433,13 +434,13 @@ public func biguint_divmod(x: []uint, y: []uint) -> option<([]uint, []uint)> {
 
     let i = n;
     while(i >= t+1) {
-        if (x[i] == y[t]) {
-            q = q with { [i-t-1] = mulDigit(1)-1 };
+        set q[i-t-1] = xif (x[i] == y[t]) {
+            mulDigit(1)-1
         } else {
-            q = q with { [i-t-1] = (mulDigit(x[i]) + x[i-1]) / y[t] };
-        }
+            (mulDigit(x[i]) + x[i-1]) / y[t]
+        };
         while(q[i-t-1]*(mulDigit(y[t])+y[t-1]) > mulDigit(mulDigit(x[i])+x[i-1])+x[i-2]) {
-            q = q with { [i-t-1] = q[i-t-1]-1 };
+            set q[i-t-1] = q[i-t-1]-1;
         }
         if let Some(diff) = biguint_subtract(
             x,
@@ -453,7 +454,7 @@ public func biguint_divmod(x: []uint, y: []uint) -> option<([]uint, []uint)> {
         ) {
             x = diff;
         } else {
-            q = q with { [i-t-1] = q[i-t-1]-1 };
+            set q[i-t-1] = q[i-t-1]-1;
             if let Some(diff) = biguint_subtract(
                 x,
                 shiftPowerOfDigit(
@@ -555,7 +556,7 @@ public func biguint_shortDivMod(x: []uint, y: uint) -> option<([]uint, uint)> {
     while(i > 0) {
         i = i-1;
         carry = carry * 0x100000000000000000000 + x[i];
-        quot = quot with { [i] = carry / y };
+        set quot[i] = carry / y;
         carry = carry % y;
     }
     return Some((quot, carry));

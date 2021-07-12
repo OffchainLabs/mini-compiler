@@ -1,0 +1,140 @@
+//
+// Copyright 2020, Offchain Labs, Inc. All rights reserved.
+//
+
+use evmCallStack::EvmCallFrame;
+use std::bytearray::ByteArray;
+
+use chainParameters::chainParams_chainId;
+
+use evmCallStack::evmCallStack_stackDepth;
+use evmCallStack::evmCallStack_topFrame;
+use evmCallStack::evmCallStack_setAccount;
+use evmCallStack::evmCallStack_setTopFrameMemory;
+use evmCallStack::evmCallStack_callHitError;
+use evmCallStack::evmCallFrame_getCalldata;
+use evmCallStack::evmCallFrame_getAccount;
+use evmCallStack::evmCallFrame_getCaller;
+
+use evmOps::evmOp_return;
+use evmOps::evmOp_revert_knownCodePc;
+
+use accounts::account_setAggregatorDecompressionState;
+
+use std::bytearray::bytearray_new;
+use std::bytearray::bytearray_size;
+use std::bytearray::bytearray_get256;
+use std::bytearray::bytearray_set256;
+use std::bytearray::bytearray_extract;
+
+use decompression::getFromFunctionTable;
+use decompression::functionTableSize;
+
+use decompression::parseAggregatorFunctionTable;
+
+
+public impure func arbFunctionTable_txcall() {
+    if let Some(topFrame) = evmCallStack_topFrame() {
+        let calldata = evmCallFrame_getCalldata(topFrame);
+        if (bytearray_size(calldata) < 4) {
+            evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 0, 0, 0);
+        }
+        let funcCode = getFuncCode(calldata);
+        if (funcCode == 0xce2ae159) {
+            arbFunctionTable_upload(topFrame, calldata);
+        } elseif(funcCode == 0x88987068) {
+            arbFunctionTable_size(topFrame, calldata);
+        } elseif(funcCode == 0xb464631b) {
+            arbFunctionTable_get(topFrame, calldata);
+        } else {
+            // unrecognized function code
+            evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 1, 0, 0);
+        }
+    } else {
+        // this shouldn't happen -- should always be called in an EVM tx
+        evmCallStack_callHitError(18);
+    }
+}
+
+func getFuncCode(ba: ByteArray) -> uint {
+    return (bytearray_get256(ba, 0) >> 224);
+}
+
+// function upload(bytes calldata buf) external;
+impure func arbFunctionTable_upload(topFrame: EvmCallFrame, calldata: ByteArray) {
+    if (bytearray_size(calldata) < (4+2*32)) {
+        evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 190, 0, 0);
+    }
+
+    let callerAddr = evmCallFrame_getCaller(topFrame);
+    let nbytes = bytearray_get256(calldata, 4+32);
+
+    let tableData = bytearray_extract(calldata, 4+2*32, nbytes);
+
+    let account = evmCallFrame_getAccount(topFrame, callerAddr);
+    if let Some(funcTable) = parseAggregatorFunctionTable(
+        tableData,
+    ) {
+        account = account_setAggregatorDecompressionState(
+            account,
+            Some(funcTable)
+        );
+    } else {
+        evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 191, 0, 0);
+    }
+
+    if (evmCallStack_setAccount(callerAddr, account)) {
+        evmOp_return(0, 0);
+    } else {
+        evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 192, 0, 0);
+    }
+}
+
+// function size(address addr) external view returns(uint);
+impure func arbFunctionTable_size(_topFrame: EvmCallFrame, calldata: ByteArray) { // (address) -> uint
+    if (bytearray_size(calldata) != 36) {
+        evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 200, 0, 0);
+    }
+
+    if let Some(size) = functionTableSize(address(bytearray_get256(calldata, 4))) {
+        if (evmCallStack_setTopFrameMemory(bytearray_set256(bytearray_new(0), 0, size))) {
+            evmOp_return(0, 32);
+        }
+    }
+
+        evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 201, 0, 0);
+}
+
+// function get(address addr, uint index) external view returns(uint, bool, uint);
+impure func arbFunctionTable_get(_topFrame: EvmCallFrame, calldata: ByteArray) { // (address, uint) -> (uint, bool, uint)
+    if (bytearray_size(calldata) != 68) {
+        evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 210, 0, 0);
+    }
+
+    let addr = address(bytearray_get256(calldata, 4));
+    let index = bytearray_get256(calldata, 36);
+
+    if let Some(res) = getFromFunctionTable(addr, index) {
+        let (funcCode, isPayable, gasLimit) = res;
+        if (evmCallStack_setTopFrameMemory(
+            bytearray_set256(
+                bytearray_set256(
+                    bytearray_set256(
+                        bytearray_new(0),
+                        0,
+                        funcCode
+                    ),
+                    32,
+                    uint(isPayable),
+                ),
+                64,
+                gasLimit,
+            )
+        )) {
+            evmOp_return(0, 96);
+        }
+    }
+
+    evmOp_revert_knownCodePc(address(const::Address_ArbFunctionTable), 211, 0, 0);
+}
+

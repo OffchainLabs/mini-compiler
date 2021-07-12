@@ -65,6 +65,7 @@ jobs:
         with:
           crate: grcov
           version: latest
+          use-tool-cache: true
 
       - name: Cache rust build products
         uses: actions/cache@v2
@@ -104,13 +105,14 @@ jobs:
       - name: Create code-coverage files if supported for rust ${{ matrix.rust }}
         if: matrix.rust == 'nightly'
         run: |
-          grcov . --binary-path ./target/release/ -s . -t lcov --branch --ignore-not-existing -o lcov.info
+          grcov . --binary-path ./target/release/ -s . -t lcov --branch --ignore-not-existing --ignore "/*" -o lcov.info
+          make coverage
 
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v1
         if: matrix.rust == 'nightly'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info
+          files: ./lcov.info,./lcov-mini.info
           fail_ci_if_error: true
-          verbose: true
+          verbose: false

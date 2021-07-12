@@ -60,7 +60,7 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
 
         let (newGlobals, _oldArbosVersion) = remapGlobalsForUpgrade(oldGlobals);
 
-        asm(newGlobals,) { rset };
+        asm(newGlobals) { rset };
 
         // now re-do the initializations that set up pointers into the ArbOS code
         errorHandler_init();
@@ -97,8 +97,6 @@ impure func main(oldGlobals: GlobalsBeforeUpgrade) {
         // advance the Arbitrum block number, and emit a block receipt
         emitGenesisBlockReceipt();
     }
-
-    // initialize any customizations here
 
     mainRunLoop();
 }

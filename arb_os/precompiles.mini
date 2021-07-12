@@ -35,9 +35,9 @@ use arbsys::arbsys_txcall;
 use arbowner::arbowner_txcall;
 use arbgasinfo::arbgasinfo_txcall;
 use arbosTest::arbosTest_txcall;
-use arbsys::arbAddressTable_txcall;
-use arbsys::arbBLS_txcall;
-use arbsys::arbFunctionTable_txcall;
+use arbaddresstable::arbAddressTable_txcall;
+use arbbls::arbBLS_txcall;
+use arbfunctiontable::arbFunctionTable_txcall;
 use arbaggregator::arbaggregator_txcall;
 use arbretryable::arbretryable_txcall;
 use arbstatistics::arbStatistics_txcall;
@@ -395,7 +395,7 @@ public impure func precompile_0x08() { // ecpairing
                 numPts = numPts - 1;
             }
 
-            let result = asm(acc,) bool { ecpairing };
+            let result = asm(acc) bool { ecpairing };
             let success = evmCallStack_setTopFrameMemory(
                 bytearray_set256(
                     bytearray_new(0),
@@ -430,7 +430,7 @@ public impure func precompile_0x09() { // Blake2
             evmOp_revert_knownPc(2, 0, 0);
         }
 
-        let outputBuf = asm(inputBuf,) buffer { blake2f };
+        let outputBuf = asm(inputBuf) buffer { blake2f };
         let mem = bytearray_fromSizeAndBuffer(64, outputBuf);
         if (evmCallStack_setTopFrameMemory(mem)) {
             evmOp_return(0, 64);

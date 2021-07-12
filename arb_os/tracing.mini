@@ -33,11 +33,10 @@ public impure func evmTracer_emit() {
     let theStack = outbox_getEvmTracer().recordStack;
     loop {
         if let Some(res) = stack_pop(theStack) {
-            let (us, item) = res;
-            theStack = us;
+            let (*theStack, item) = res;
             val = (item, val);
         } else {
-            asm((20000, val),) { debugprint };
+            debug((20000, val));
             return;
         }
     }

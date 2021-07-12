@@ -1292,7 +1292,7 @@ impl RtEnvRecorder {
         if let Some(trace_file_name) = trace_file {
             machine.add_trace_writer(trace_file_name);
         }
-        machine.start_at_zero();
+        machine.start_at_zero(false);
         if debug {
             let _ = machine.debug(None);
         } else if (profiler_mode != ProfilerMode::Never) {

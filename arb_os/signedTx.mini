@@ -9,12 +9,12 @@ use chainParameters::chainParams_chainId;
 
 
 public impure func recoverSigner(tx: SignedTx) -> option<address> {
-    let rlpHashForSig = bytes32(0);
-    if ( (tx.v == 27) || (tx.v == 28) ) {
-        rlpHashForSig = rlp_encodeAndHashMessageInfoForSignature(tx, None<uint>);  // non-EIP155 signature
+    let rlpHashForSig = xif ( (tx.v == 27) || (tx.v == 28) ) {
+        rlp_encodeAndHashMessageInfoForSignature(tx, None<uint>)  // non-EIP155 signature
     } else {
-        rlpHashForSig = rlp_encodeAndHashMessageInfoForSignature(tx, Some(chainParams_chainId()));  // EIP155 signature
-    }
+        rlp_encodeAndHashMessageInfoForSignature(tx, Some(chainParams_chainId()))  // EIP155 signature
+    };
+
     let signer = asm(
         tx.r,
         tx.s,

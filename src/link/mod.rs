@@ -64,7 +64,7 @@ pub struct LinkedProgram {
     pub code: Vec<Instruction<AVMOpcode>>,
     pub static_val: Value,
     pub globals: Vec<GlobalVarDecl>,
-    #[serde(default)]
+    // #[serde(default)]
     pub file_info_chart: BTreeMap<u64, FileInfo>,
     pub type_tree: SerializableTypeTree,
 }

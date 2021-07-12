@@ -64,12 +64,12 @@ use decompression::decompressAndVerifyBLSSignedTxBatch;
 
 type Inbox = struct {
     queue: IncomingRequestQueue,    // queue of requests that haven't yet been retrieved from the inbox
-    arbBlockNum: uint,              // highest Arbitrum blocknum of messages that we have retrieved from the inbox
-    ethBlockNum: uint,              // highest L1 blocknum of messages that we have retrieved from the inbox
-    timestamp: uint,                // highest timestamp of messages that we have retrieved from the inbox
-    atStartOfBlock: bool,           // true iff we should start a new block when the next message arrives
+    arbBlockNum: uint,              // highest Arbitrum blocknum of messages that have been retrieved from the inbox
+    ethBlockNum: uint,              // highest L1 blocknum of messages that have been retrieved from the inbox
+    timestamp: uint,                // highest timestamp of messages that have been retrieved from the inbox
+    atStartOfBlock: bool,           // true iff we should start a new Arbitrum block when the next message arrives
     inboxHashAccumulator: bytes32,  // hash accumulator covering all inbox messages so far
-    pendingMessage: option<IncomingRequest>,
+    pendingMessage: option<IncomingRequest>,  // message being held until sideloads have had a chance to be processed
 }
 
 var globalInbox: Inbox;
@@ -97,7 +97,7 @@ public impure func inbox_init() {
 public impure func emitGenesisBlockReceipt() {
     outputStats_endOfBlock(globalInbox.arbBlockNum, globalInbox.ethBlockNum, globalInbox.timestamp);
     blockhash_submitHash(globalInbox.ethBlockNum, globalInbox.inboxHashAccumulator);
-    globalInbox = globalInbox with { arbBlockNum: globalInbox.arbBlockNum + 1 };
+    set globalInbox.arbBlockNum = globalInbox.arbBlockNum + 1;
 }
 
 public impure func inbox_get() -> IncomingRequest {
@@ -111,42 +111,43 @@ public impure func inbox_get() -> IncomingRequest {
             globalInbox = getFromL1Inbox(globalInbox);
         }
 
-        let (updatedQ, rawMsg,) = incomingRequestQueue_getOrDie(globalInbox.queue);
-        globalInbox = globalInbox with { queue: updatedQ };
+        let (updatedQ, rawMsg) = incomingRequestQueue_getOrDie(globalInbox.queue);
+        set globalInbox.queue = updatedQ ;
         let ebMsg = unsafecast<IncomingRequest>(rawMsg);
 
         let ebMsgHash = hashIncomingRequest(ebMsg);
-        globalInbox = globalInbox with {
-            inboxHashAccumulator: hash(globalInbox.inboxHashAccumulator, ebMsgHash)
-        };
+        set globalInbox.inboxHashAccumulator = hash(globalInbox.inboxHashAccumulator, ebMsgHash);
 
         if (ebMsg.kind == const::L1MessageType_setChainParameters) {
             if (ebMsg.sender == address(0)) {
                 chainParams_gotParamsMessage(ebMsg.msgData);
-            }   // ignore this message if it didn't come from chain owner
+            }   // ignore this message if it didn't come from address zero
+            // loop back to get the next message
         } else {
-            return ebMsg with {
-                requestId: uint(hash(bytes32(chainParams_chainId()), bytes32(ebMsg.requestId)))
-            };
+            set ebMsg.requestId = uint(hash(bytes32(chainParams_chainId()), bytes32(ebMsg.requestId)));
+            return ebMsg;
         }
     };
 }
 
+// translate a newly arrived message from the incoming format into the format we'll use internally
 impure func incomingRequestFromRaw(newMsgRaw: IncomingRequestFromInbox, fromSideload: bool) -> IncomingRequest {
     if (! fromSideload) {
         updateL1GasPriceEstimate(newMsgRaw.sender, newMsgRaw.gasPriceL1);
     }
 
     if (newMsgRaw.ethBlockNumber < globalInbox.ethBlockNum) {
-        newMsgRaw = newMsgRaw with { ethBlockNumber: globalInbox.ethBlockNum };
+        // enforce non-decreasing property of Ethereum block numbers on incoming messages
+        set newMsgRaw.ethBlockNumber = globalInbox.ethBlockNum;
     }
     if (newMsgRaw.timestamp < globalInbox.timestamp) {
-        newMsgRaw = newMsgRaw with { timestamp: globalInbox.timestamp };
+        // enforce non-decreasing property of timestamps on incoming messages
+        set newMsgRaw.timestamp = globalInbox.timestamp;
     }
 
     return struct {
         kind: newMsgRaw.kind,
-        arbBlockNumber: globalInbox.arbBlockNum,
+        arbBlockNumber: globalInbox.arbBlockNum,    // assign the current Arbitrum block number
         ethBlockNumber: newMsgRaw.ethBlockNumber,
         timestamp: newMsgRaw.timestamp,
         sender: newMsgRaw.sender,
@@ -169,29 +170,32 @@ impure func incomingRequestFromRaw(newMsgRaw: IncomingRequestFromInbox, fromSide
     // If there are no messages available in the L1 inbox, this blocks until one is available
 
     if let Some(pendingMsg) = inbox.pendingMessage {
-        let rawSideloadMsg = asm(inbox.arbBlockNum,) any { sideload };
+        // There is a pending message, so we need to handle any sideloads before proceeding.
+        // Sideloads are method that nodes can use to inject messages into their private copy of the AVM state.
+        // In the "on chain" AVM, a sideload instruction always returns (), but a node can make it return something
+        //      else, to get the node's private copy of the chain state to process some other message.
+        // At the end of each block, ArbOS will process as many sideloaded messages as it is given, until a sideload
+        //      returns (). Then ArbOS will go on to process the messages from the new L1 block.
+        let rawSideloadMsg = asm(inbox.arbBlockNum) any { sideload };
         if (rawSideloadMsg != ()) {
+            // a sideloaded message was received, so enqueue it for processing
             let newMsg = incomingRequestFromRaw(unsafecast<IncomingRequestFromInbox>(rawSideloadMsg), true);
             return inbox with {
                 queue: incomingRequestQueue_put(inbox.queue, newMsg)
             };
         }
 
-        // do end of block processing
+        // there are no more sideloads for this block, so do end of block processing
         outputStats_endOfBlock(inbox.arbBlockNum, inbox.ethBlockNum, inbox.timestamp);
         blockhash_submitHash(inbox.ethBlockNum, inbox.inboxHashAccumulator);
 
-        inbox = inbox with {
-            pendingMessage: None<IncomingRequest>
-        } with {
-            arbBlockNum: inbox.arbBlockNum + 1
-        } with {
-            ethBlockNum: pendingMsg.ethBlockNumber
-        } with {
-            timestamp: pendingMsg.timestamp
-        };
+        set inbox.pendingMessage = None<IncomingRequest>;
+        set inbox.arbBlockNum = inbox.arbBlockNum + 1;
+        set inbox.ethBlockNum = pendingMsg.ethBlockNumber;
+        set inbox.timestamp = pendingMsg.timestamp;
 
         return xif (pendingMsg.kind != const::L1MessageType_endOfBlock) {
+            // enqueue the pending message for processing
             inbox with {
                 queue: incomingRequestQueue_put(
                     inbox.queue,
@@ -207,30 +211,19 @@ impure func incomingRequestFromRaw(newMsgRaw: IncomingRequestFromInbox, fromSide
 
     let newMsg = incomingRequestFromRaw(asm() IncomingRequestFromInbox { inbox }, false);
     if ( (!inbox.atStartOfBlock) && ((newMsg.ethBlockNumber > inbox.ethBlockNum) || (newMsg.timestamp > inbox.timestamp)) ){
-        return inbox with {
-            pendingMessage: Some(newMsg)
-        };
+        set inbox.pendingMessage = Some(newMsg);
     } elseif (newMsg.kind == const::L1MessageType_endOfBlock) {
-        return xif (inbox.atStartOfBlock) {
-            inbox
-        } else {
-            inbox with {
-                pendingMessage: Some(newMsg)
-            }
-        };
+        if ( ! inbox.atStartOfBlock) {
+            set inbox.pendingMessage = Some(newMsg);
+        }
+    } else {
+        set inbox.queue = incomingRequestQueue_put(inbox.queue, newMsg);
+        set inbox.ethBlockNum = newMsg.ethBlockNumber;
+        set inbox.arbBlockNum = newMsg.arbBlockNumber;
+        set inbox.timestamp = newMsg.timestamp;
+        set inbox.atStartOfBlock = false;
     }
-
-    return inbox with {
-        queue: incomingRequestQueue_put(inbox.queue, newMsg)
-    } with {
-        ethBlockNum: newMsg.ethBlockNumber
-    } with {
-        arbBlockNum: newMsg.arbBlockNumber
-    } with {
-        timestamp: newMsg.timestamp
-    } with {
-        atStartOfBlock: false
-    };
+    return inbox;
 }
 
 public impure func inbox_currentTimestamp() -> uint {
@@ -250,10 +243,10 @@ type IncomingRequestFromInbox = struct {
     ethBlockNumber: uint,     // block number of the L1 block
     timestamp: uint,          // timestamp of the L1 block
     sender: address,          // address of the sender
-    requestId: uint,
+    requestId: uint,          // unique value assigned by the L1 inbox contract
     gasPriceL1: uint,         // L1 gas price paid by this tx
-    msgSize: uint,
-    msgData: buffer,
+    msgSize: uint,            // size of payload message
+    msgData: buffer,          // payload message data
 }
 
 type IncomingRequest = struct {
@@ -262,12 +255,12 @@ type IncomingRequest = struct {
     ethBlockNumber: uint,     // block number of the L1 block
     timestamp: uint,          // timestamp of the L1 block
     sender: address,          // address of the sender
-    requestId: uint,
+    requestId: uint,          // unique identifier for this request
     msgData: ByteArray,       // kind-specific data
     provenance: RequestProvenance,
     aggregator: option<AggregatorInfo>,
-    adminMode: bool,
-    gasEstimationParams: option<GasEstimationParams>,
+    adminMode: bool,          // true iff this is a sideloaded message inserted for private execution by a node
+    gasEstimationParams: option<GasEstimationParams>,  // used if this is a gas estimation message
 }
 
 type GasEstimationParams = struct {
@@ -287,7 +280,7 @@ type AggregatorInfo = struct {
     calldataUnits: uint,
 }
 
-func hashIncomingRequest(req: IncomingRequest) -> bytes32 {
+func hashIncomingRequest(req: IncomingRequest) -> bytes32 {  // a convenient hash over some fields of a request
     return hash(
         bytes32(req.kind),
         hash(
@@ -311,39 +304,36 @@ func hashIncomingRequest(req: IncomingRequest) -> bytes32 {
 
 public impure func mainRunLoop() {
     loop {
-        if let Some(res) = txRequestQueue_get(globalInputQueue.txQ) {
+        if let Some(res) = txRequestQueue_get(globalInputQueue.txQ) {   // consume from txQ first
             let (newQ, tx) = res;
             globalInputQueue = globalInputQueue with {
                 txQ: newQ
             };
             handleArrivingTx(unsafecast<TxRequestData>(tx));
         } else {
-            let msg = xif let Some(res) = incomingRequestQueueStack_get(globalInputQueue.batchQ) {
+            let msg = xif let Some(res) = incomingRequestQueueStack_get(globalInputQueue.batchQ) {  // consume from batchQ second
                 let (newQ, umsg) = res;
                 globalInputQueue = globalInputQueue with {
                     batchQ: newQ
                 };
                 umsg
             } else {
-                inbox_get()
+                inbox_get()   // the queues are empty, so get the next message from the inbox
             };
 
             if let Some(batch) = messageBatch_tryNew(msg) {
-                // it's a batch message, so unpack its components and queue them
+                // it's a batch message, so unpack all of its component requests and put them in the batchQ
                 let moreToDo = true;
                 let queue = incomingRequestQueue_new();
                 while (moreToDo) {
                     if let Some(res) = messageBatch_get(batch) {
-                        let (newMsg, restOfBatch) = res;
+                        let (newMsg, *batch) = res;
                         queue = incomingRequestQueue_put(queue, newMsg);
-                        batch = restOfBatch;
                     } else {
                         moreToDo = false;
                     }
                 }
-                globalInputQueue = globalInputQueue with {
-                    batchQ: incomingRequestQueueStack_push(globalInputQueue.batchQ, queue)
-                };
+                set globalInputQueue.batchQ = incomingRequestQueueStack_push(globalInputQueue.batchQ, queue);
             } elseif (    (msg.kind == const::L1MessageType_L2 || msg.kind == const::L1MessageType_L2ForGasEstimation)
                        && (bytearray_getByte(msg.msgData, 0) == const::L2MessageType_blsBatch) ) {
                if let Some(updatedQ) = decompressAndVerifyBLSSignedTxBatch(
@@ -351,7 +341,7 @@ public impure func mainRunLoop() {
                     msg,
                     unsafecast<Queue>(globalInputQueue.txQ)
                 ) {
-                    globalInputQueue = globalInputQueue with { txQ: unsafecast<TxRequestQueue>(updatedQ) };
+                    set globalInputQueue.txQ = unsafecast<TxRequestQueue>(updatedQ);
                 }
                 // else BLS batch was bad, so ignore it
             } else {
@@ -364,12 +354,10 @@ public impure func mainRunLoop() {
 impure func handleUnpackedMessage(msg: IncomingRequest) {
     if (msg.kind == const::L1MessageType_L2FundedByL1) {
         // record the calldata usage, so it can be reported in tx receipt
-        msg = msg with {
-            aggregator: Some(struct {
-                aggregator: None<address>,
-                calldataUnits: bytearray_getCalldataUnits(msg.msgData),
-            })
-        };
+        set msg.aggregator = Some(struct {
+            aggregator: None<address>,
+            calldataUnits: bytearray_getCalldataUnits(msg.msgData),
+        });
 
         // the message carries an ETH deposit
         // verify the validity of the message, process the deposit, then process the tx
@@ -409,17 +397,13 @@ impure func handleUnpackedMessage(msg: IncomingRequest) {
         // it's an end-of-block message, so just trigger end-of-block processing
         outputStats_endOfBlock(msg.arbBlockNumber, msg.ethBlockNumber, msg.timestamp);
         blockhash_submitHash(msg.ethBlockNumber, globalInbox.inboxHashAccumulator);
-        globalInbox = globalInbox with {
-            arbBlockNum: globalInbox.arbBlockNum + 1
-        };
+        set globalInbox.arbBlockNum = globalInbox.arbBlockNum + 1;
     } elseif (msg.kind == const::L1MessageType_L2 || msg.kind == const::L1MessageType_L2ForGasEstimation) {
         // record the calldata usage, so it can be reported in tx receipt
-        msg = msg with {
-            aggregator: Some(struct {
-                aggregator: xif let Some(aggInfo) = msg.aggregator { aggInfo.aggregator } else { None<address> },
-                calldataUnits: bytearray_getCalldataUnits(msg.msgData),
-            })
-        };
+        set msg.aggregator = Some(struct {
+            aggregator: xif let Some(aggInfo) = msg.aggregator { aggInfo.aggregator } else { None<address> },
+            calldataUnits: bytearray_getCalldataUnits(msg.msgData),
+        });
 
         // it's an L2 message, so switch based on the L2 type
         let firstByte = bytearray_getByte(msg.msgData, 0);
@@ -495,37 +479,26 @@ impure func handleArrivingTx(tx: TxRequestData) {
 
 impure func translateUnsignedTx(request: IncomingRequest) -> option<TxRequestData> {
     let inStream = bytestream_new(request.msgData);
-    let (us, subtype) = bytestream_getByte(inStream)?;
-    inStream = us;
+    let (*inStream, subtype) = bytestream_getByte(inStream)?;
+    let (*inStream, maxGas) = bytestream_get256(inStream)?;
+    let (*inStream, gasPrice) = bytestream_get256(inStream)?;
 
-    let (us, maxGas) = bytestream_get256(inStream)?;
-    inStream = us;
+    let seqNum = xif (subtype == const::L2MessageType_unsignedEOATx) {
+        let (*inStream, sn) = bytestream_get256(inStream)?;
+        Some(sn)
+    } else {
+        None<uint>
+    };
 
-    let (us, gasPrice) = bytestream_get256(inStream)?;
-    inStream = us;
-
-    let seqNum = None<uint>;
-    if (subtype == const::L2MessageType_unsignedEOATx) {
-        let (us, sn) = bytestream_get256(inStream)?;
-        inStream = us;
-        seqNum = Some(sn);
-    }
-
-    let (us, destAddrAsUint) = bytestream_get256(inStream)?;
-    inStream = us;
-
-    let (us, value) = bytestream_get256(inStream)?;
-    inStream = us;
-
+    let (*inStream, destAddrAsUint) = bytestream_get256(inStream)?;
+    let (*inStream, value) = bytestream_get256(inStream)?;
     let calldata = bytestream_getRemainingBytes(inStream);
 
     if (subtype == const::L2MessageType_unsignedEOATx) {
-        request = request with {
-            requestId: uint(hash(
-                bytes32(request.sender),
-                hash(bytes32(chainParams_chainId()), keccak256(request.msgData, 0, bytearray_size(request.msgData))),
-            ))
-        };
+        set request.requestId = uint(hash(
+            bytes32(request.sender),
+            hash(bytes32(chainParams_chainId()), keccak256(request.msgData, 0, bytearray_size(request.msgData))),
+        ));
     }
     return Some(
         struct {

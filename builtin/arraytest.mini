@@ -4,6 +4,16 @@
 
 use core::array::array;
 use core::array::builtin_arrayOp;
+use core::array::builtin_arrayGetSafe;
+use core::array::builtin_arraySetSafe;
+use core::array::builtin_arrayGetConsecutive;
+use core::array::builtin_arrayGetConsecutiveSafe;
+use core::array::builtin_arraySwap;
+use core::array::builtin_arraySwapSafe;
+use core::array::builtin_arrayOpSafe;
+use core::array::builtin_arrayOpConsecutive;
+use core::array::builtin_arrayOpConsecutiveSafe;
+use core::array::array_resize;
 
 type opClosure = struct {
 	f: func(any, any) -> (any, any),
@@ -58,7 +68,106 @@ func tests() -> uint {
 	if (result.1 != 7) {
 		return 6;
 	}
-
+    
+    let a = newarray<uint>(117);
+    a = a with { [58] = 32 };
+    a = a with { [59] = 64 };
+    a = a with { [63] = 44 };
+    a = a with { [64] = 96 };
+    let a = unsafecast<array>(a);
+    let pair = builtin_arrayGetConsecutive(a, 58);
+    if (pair.0 != 32 || pair.1 != 64) {
+        return 7;
+    }
+    if let Some(updated) = builtin_arraySetSafe(a, 63, 80) {
+        a = updated;
+    } else {
+        return 8;
+    }
+    if let Some(issue) = builtin_arraySetSafe(a, 117, 4) {
+        return 8;
+    }
+    let pair = builtin_arrayGetConsecutive(a, 63);
+    if (pair.0 != 80 || pair.1 != 96) {
+        return 9;
+    }
+    
+    if (builtin_arrayGetSafe(a, 116) == None<any>) {
+        return 10;
+    }
+    if (builtin_arrayGetSafe(a, 117) != None<any>) {
+        return 10;
+    }
+    if (builtin_arrayGetConsecutiveSafe(a, 116) != None<(any, any)>) {
+        return 11;
+    }
+    if (builtin_arrayGetConsecutiveSafe(a, 62) == None<(any, any)>) {
+        return 11;
+    }
+    
+    a = array_resize(a, 117, 8);
+    a = array_resize(a, 116, 8);
+    let (a, old) = builtin_arraySwap(a, 63, 100);
+    if (old != 80) {
+        return 12;
+    }
+    if let Some(change) = builtin_arraySwapSafe(a, 63, 102) {
+        a = change.0;
+        if (change.1 != 100) {
+            return 12;
+        }
+    } else {
+        return 12;
+    }
+    if let Some(issue) = builtin_arraySwapSafe(a, 116, 104) {
+        return 12;
+    }
+    
+    if let Some(issue) = builtin_arrayOpSafe(a, 116, unsafecast<opClosure>(struct { f: addFunc, val: 8, })) {
+        return 13;
+    }
+    if let Some(change) = builtin_arrayOpSafe(a, 63, unsafecast<opClosure>(struct { f: addFunc, val: 8, })) {
+        a = change.0;
+        if (change.1 != 110) {
+            return 13;
+        }
+    } else {
+        return 13;
+    }
+    
+    let (a, value_63, value_64) = 
+        builtin_arrayOpConsecutive(
+            a,
+            63,
+            unsafecast<opClosure>(struct { f: addFunc, val: 16, }),
+            unsafecast<opClosure>(struct { f: addFunc, val: 24, })
+        );
+    
+    if (value_63 != 126 || value_64 != 120) {
+        return 14;
+    }
+    
+    if let Some(change) = builtin_arrayOpConsecutiveSafe(
+        a,
+        63,
+        unsafecast<opClosure>(struct { f: addFunc, val: 16, }),
+        unsafecast<opClosure>(struct { f: addFunc, val: 24, })
+    ) {
+        a = change.0;
+        if (change.1 != 142 || change.2 != 144) {
+            return 15;
+        }
+    }
+    
+    if let Some(issue) = builtin_arrayOpConsecutiveSafe(
+        a,
+        115,
+        unsafecast<opClosure>(struct { f: addFunc, val: 16, }),
+        unsafecast<opClosure>(struct { f: addFunc, val: 24, })
+    ) {
+        return 15;
+    }
+    
 	return 0;
 }
 

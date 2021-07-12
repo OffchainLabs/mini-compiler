@@ -305,7 +305,7 @@ fn _test_eth_blake_precompile_impl() {
     ];
 
     let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
-    machine.start_at_zero();
+    machine.start_at_zero(true);
 
     let my_addr = Uint256::from_u64(1025);
 
@@ -334,4 +334,6 @@ fn _test_eth_blake_precompile_impl() {
 
         assert_eq!(y.map(|s| hex::decode(s).unwrap()), yret);
     }
+
+    machine.write_coverage("test_eth_blake_precompile".to_string());
 }

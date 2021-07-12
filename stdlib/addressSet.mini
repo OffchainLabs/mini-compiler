@@ -16,7 +16,7 @@ use std::storageMap::storageMap_serializeListOfNonzeros;
 
 type SetOfAddresses = struct {
     contents: StorageMap,
-    inverted: bool,        // if true, then contents is all of the addresses not in the set
+    inverted: bool,        // if true, then membership is inverted (an item is in the set iff it's NOT in contents)
 }
 
 public func setOfAddresses_emptySet() -> SetOfAddresses {

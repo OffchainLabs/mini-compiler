@@ -82,8 +82,8 @@ public func bls_hashAndVerifySignature(
 
     let i = 0;
     while (i < numMsgs) {
-        let hashedMessage = bls_hashToPoint(domain, messages[i])?;
-        hashedMessages = hashedMessages with { [i] = hashedMessage };
+        set hashedMessages[i] = bls_hashToPoint(domain, messages[i])?;
+        i = i + 1;
     }
 
     return bls_verifySignature(hashedMessages, keys, signature);
