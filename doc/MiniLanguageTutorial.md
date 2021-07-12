@@ -1,6 +1,6 @@
 # Mini language tutorial
 
-[version of June 5th, 2020]
+[version of July 12th, 2021]
 
 Mini is a programming language and compiler designed for writing code for the Arbitrum Virtual Machine (AVM) platform.  The language is simple but has some features customized for AVM.  This tutorial will tell you what you need to know to write Mini programs.
 
@@ -132,51 +132,28 @@ Mini has the following types:
 
 > a type that has no values, so that no value of this type can ever exist
 
-## Equality and assignability for types
+## Equality and Assignability for types
 
-Two types are equal if they have the same structure. Type aliases, as defined by non-import declarations, do not create a new type but simply define a shorthand method for referring to the underlying type.  (For example, after the declaration "`type foo = uint`", foo and uint are the same type.)
+A value of type `V` is assignable to storage of type `S` if and only if any of the following are true:
 
-Every atomic type is equal to itself.
+* `S` and `V` are the same atomic type
+* `S` and `V` are options, and the inner type of `V` is assignable to the inner type of `S`
+* `S` and `V` are tuples with the same number of fields, and each field of `V` is assignable to the corresponding field of `S`
+* `S` and `V` are arrays, and the member type of `V` is assignable to the member type of `S`
+* `S` and `V` are fixed-size arrays with the same size, and the member type of `V` is assignable to the member type of `S`
+* `S` and `V` are structs with the same number of fields, and each field of `V` has the same name as and is assignable to that of `S`
+* `S` and `V` are maps, and the key and value types of `V` are correspondingly assignable to that of `S`
+* `S` and `V` are void-returning functions with the same number of arguments, each of which in `S` being assignable to that of `V`, and either `V` is pure or `S` is impure
+* `S` and `V` are type-returning functions with the same number of arguments, each of which in `S` being assignable to that of `V`, and either `V` is pure or `S` is impure, and the return type of `V` is assignable to that of `S`
+* `S` is the `any` type
 
-Two tuple types are equal if they have the same number of fields and their field types are equal, field-by-field.
-
-Two fixed-size array types are equal if they have the same size and their field types are equal.
-
-Two array types are equal if their field types are equal.
-
-Two struct types are equal if have the same number of fields, and each field has the same name and equal type, field-by-field.
-
-Two func types are equal if they are both impure or both not-impure, and they have the same number of argument types, and each argument type is equal, argument-by-argument, and the return types are equal (or neither has a return type).
-
-Two map types are equal if their key types are equal and their value types are equal.
-
-Two option types are equal if their inner types are equal
-
-`any` equals itself.
-
-`every` equals itself.
-
-Each imported type equals itself.
-
-Unless specified as equal by the rules above, a pair of types is unequal.
-
-### Assignability
-
-A value of type `V` is assignable to storage of type `S` if:
-
-* `S` is `any`, or
-* `V` equals `S`,
-* `V` and `S` are tuple types with the same number of fields, and each field of `V` is assignable to the corresponding field of `S`,
-* `V` and `S` are fixed-size arrays of the same size, and the field type of `V` is assignable to the field type of `S`,
-* `V` and `S` are arrays, and the field type of `V` is assignable to the field type of `S`,
-* `V` and `S` are structs, with the same number of fields, and each field of `V` has the same name as the corresponding field of `S`, and each field of `V` is assignable to the corresponding field of `S`,
-* `V` and `S` are function types, with the same number of arguments, and either `S` is impure or `V` is not impure, and each argument type of `V` is assignable to the corresponding argument type of `S`, and either (a) both `S` and `V` return void, or (b) the return type of `S` is assignable to the return type of `V`.  (Note that the return type is compared for assignability "backwards". This is needed to make calls through function references type-safe.)
-* `V` and `S` are map types, and the key type of `V` is assignable to the key type of `S`, and the value types of `V` and `S` are equal.
-* `V` and `S` are optional types, and the inner type of `V` is assignable to the inner type of `S`
-
-These rules guarantee that assignability is transitive. 
+These rules guarantee that if `A` is assignable to `B` and `B` is assignable to `C`, then `A` is assignable to `C`.
 
 The compiler uses often uses type inference to infer the types of variables from the types of values assigned to them.  If a programmer wants the compiler to infer a different type, they should use an explicit type-casting operation to convert the value to the desired type.
+
+Two types are equal if each is assignable to the other.
+
+A type definition `type A = B`, whether imported or defined locally, creates a new type `A` to which `B` is assignable.
 
 ## Castability
 
