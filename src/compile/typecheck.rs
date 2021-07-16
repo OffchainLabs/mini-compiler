@@ -11,6 +11,7 @@ use super::ast::{
 };
 use crate::compile::ast::FieldInitializer;
 use crate::compile::{CompileError, ErrorSystem, InliningHeuristic};
+use crate::console::Color;
 use crate::link::{ExportedFunc, Import, ImportedFunc};
 use crate::mavm::{AVMOpcode, Instruction, Label, Opcode, Value};
 use crate::pos::{Column, Location};
@@ -732,13 +733,15 @@ impl TypeCheckedFunc {
                     flowcheck_warnings.push(CompileError::new_warning(
                         String::from("Compile warning"),
                         format!(
-                            "func {}{}{}'s argument {}{}{} is declared but never used",
-                            error_system.warn_color,
-                            string_table.name_from_id(self.name.clone()),
-                            CompileError::RESET,
-                            error_system.warn_color,
-                            string_table.name_from_id(arg.name.clone()),
-                            CompileError::RESET,
+                            "func {}'s argument {} is declared but never used",
+                            Color::color(
+                                error_system.warn_color,
+                                string_table.name_from_id(self.name.clone())
+                            ),
+                            Color::color(
+                                error_system.warn_color,
+                                string_table.name_from_id(arg.name.clone())
+                            ),
                         ),
                         arg.debug_info.location.into_iter().collect(),
                     ));
@@ -748,13 +751,15 @@ impl TypeCheckedFunc {
                     flowcheck_warnings.push(CompileError::new_warning(
                         String::from("Compile warning"),
                         format!(
-                            "func {}{}{}'s argument {}{}{} is assigned but never used",
-                            error_system.warn_color,
-                            string_table.name_from_id(self.name.clone()),
-                            CompileError::RESET,
-                            error_system.warn_color,
-                            string_table.name_from_id(arg.name.clone()),
-                            CompileError::RESET,
+                            "func {}'s argument {} is assigned but never used",
+                            Color::color(
+                                error_system.warn_color,
+                                string_table.name_from_id(self.name.clone())
+                            ),
+                            Color::color(
+                                error_system.warn_color,
+                                string_table.name_from_id(arg.name.clone())
+                            ),
                         ),
                         vec![*loc],
                     ));
@@ -768,10 +773,11 @@ impl TypeCheckedFunc {
                 flowcheck_warnings.push(CompileError::new_warning(
                     String::from("Compile warning"),
                     format!(
-                        "value {}{}{} is assigned but never used",
-                        error_system.warn_color,
-                        string_table.name_from_id(id.clone()),
-                        CompileError::RESET,
+                        "value {} is assigned but never used",
+                        Color::color(
+                            error_system.warn_color,
+                            string_table.name_from_id(id.clone())
+                        ),
                     ),
                     vec![loc],
                 ));
@@ -1268,10 +1274,8 @@ pub fn typecheck_function(
         if fd.code.len() == 0 {
             return Err(CompileError::new_type_error(
                 format!(
-                    "Func {}{}{} never returns",
-                    CompileError::RED,
-                    string_table.name_from_id(fd.name),
-                    CompileError::RESET,
+                    "Func {} never returns",
+                    Color::red(string_table.name_from_id(fd.name)),
                 ),
                 fd.debug_info.location.into_iter().collect(),
             ));
@@ -1282,10 +1286,8 @@ pub fn typecheck_function(
                 _ => {
                     return Err(CompileError::new_type_error(
                         format!(
-                            "Func {}{}{}'s last statement is not a return",
-                            CompileError::RED,
-                            string_table.name_from_id(fd.name),
-                            CompileError::RESET,
+                            "Func {}'s last statement is not a return",
+                            Color::red(string_table.name_from_id(fd.name)),
                         ),
                         fd.debug_info
                             .location
@@ -1301,10 +1303,8 @@ pub fn typecheck_function(
     if let Some(location_option) = undefinable_ids.get(&fd.name) {
         return Err(CompileError::new_type_error(
             format!(
-                "Func {}{}{} has the same name as another top-level symbol",
-                CompileError::RED,
-                string_table.name_from_id(fd.name),
-                CompileError::RESET,
+                "Func {} has the same name as another top-level symbol",
+                Color::red(string_table.name_from_id(fd.name)),
             ),
             location_option
                 .iter()
@@ -1319,10 +1319,8 @@ pub fn typecheck_function(
         arg.tipe.get_representation(type_tree).map_err(|_| {
             CompileError::new_type_error(
                 format!(
-                    "Unknown type for function argument {}{}{}",
-                    CompileError::RED,
-                    string_table.name_from_id(arg.name),
-                    CompileError::RESET,
+                    "Unknown type for function argument {}",
+                    Color::red(string_table.name_from_id(arg.name)),
                 ),
                 arg.debug_info.location.into_iter().collect(),
             )
@@ -1330,13 +1328,9 @@ pub fn typecheck_function(
         if let Some(location_option) = undefinable_ids.get(&arg.name) {
             return Err(CompileError::new_type_error(
                 format!(
-                    "Func {}{}{}'s argument {}{}{} has the same name as a top-level symbol",
-                    CompileError::RED,
-                    string_table.name_from_id(fd.name),
-                    CompileError::RESET,
-                    CompileError::RED,
-                    string_table.name_from_id(arg.name),
-                    CompileError::RESET,
+                    "Func {}'s argument {} has the same name as a top-level symbol",
+                    Color::red(string_table.name_from_id(fd.name)),
+                    Color::red(string_table.name_from_id(arg.name)),
                 ),
                 location_option
                     .iter()

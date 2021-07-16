@@ -4,6 +4,7 @@
 
 //! Contains utilities for compiling mini source code.
 
+use crate::console::Color;
 use crate::link::{link, postlink_compile, ExportedFunc, Import, ImportedFunc, LinkedProgram};
 use crate::mavm::Instruction;
 use crate::pos::{BytePos, Location};
@@ -140,8 +141,8 @@ impl CompileStruct {
             warnings: vec![],
             warnings_are_errors: self.warnings_are_errors,
             warn_color: match self.warnings_are_errors {
-                true => CompileError::PINK,
-                false => CompileError::YELLOW,
+                true => Color::PINK,
+                false => Color::YELLOW,
             },
             file_info_chart: BTreeMap::new(),
         };
@@ -331,6 +332,7 @@ impl TypeCheckedModule {
 
         call_graph
     }
+
     ///Reasons about control flow and construct usage within the typechecked AST
     fn flowcheck(&mut self, error_system: &mut ErrorSystem) {
         let mut flow_warnings = vec![];
@@ -344,10 +346,8 @@ impl TypeCheckedModule {
                 flow_warnings.push(CompileError::new_warning(
                     String::from("Compile warning"),
                     format!(
-                        "use statement {}{}{} is a duplicate",
-                        error_system.warn_color,
-                        import.name,
-                        CompileError::RESET,
+                        "use statement {} is a duplicate",
+                        Color::color(error_system.warn_color, &import.name)
                     ),
                     prior
                         .location
@@ -386,10 +386,8 @@ impl TypeCheckedModule {
             flow_warnings.push(CompileError::new_warning(
                 String::from("Compile warning"),
                 format!(
-                    "use statement {}{}{} is unnecessary",
-                    error_system.warn_color,
-                    import.name,
-                    CompileError::RESET,
+                    "use statement {} is unnecessary",
+                    Color::color(error_system.warn_color, import.name)
                 ),
                 import.location.into_iter().collect(),
             ));
@@ -614,10 +612,8 @@ pub fn compile_from_file(
         Err(CompileError::new(
             String::from("Compile error"),
             format!(
-                "Could not parse {}{}{} as valid path",
-                CompileError::RED,
-                path.display(),
-                CompileError::RESET,
+                "Could not parse {} as valid path",
+                Color::red(path.display())
             ),
             vec![],
         ))
@@ -969,10 +965,11 @@ fn typecheck_programs(
                         typecheck_warnings.push(CompileError::new_warning(
                             String::from("Compile warning"),
                             format!(
-                                "func {}{}{} {}",
-                                error_system.warn_color,
-                                string_table.name_from_id(*id),
-                                CompileError::RESET,
+                                "func {} {}",
+                                Color::color(
+                                    error_system.warn_color,
+                                    string_table.name_from_id(*id)
+                                ),
                                 match declared_purity {
                                     true => "is impure but not marked impure",
                                     false => "is declared impure but does not contain impure code",
@@ -1025,10 +1022,8 @@ fn check_global_constants(
             error_system.warnings.push(CompileError::new_warning(
                 String::from("Compile warning"),
                 format!(
-                    "global constant {}{}{} is never used",
-                    error_system.warn_color,
-                    constant,
-                    CompileError::RESET,
+                    "global constant {} is never used",
+                    Color::color(error_system.warn_color, constant),
                 ),
                 vec![],
             ));
@@ -1128,10 +1123,8 @@ fn consume_program_callgraph(
                 error_system.warnings.push(CompileError::new_warning(
                     String::from("Compile warning"),
                     format!(
-                        "func {}{}{} is unreachable",
-                        error_system.warn_color,
-                        func_name,
-                        CompileError::RESET,
+                        "func {} is unreachable",
+                        Color::color(error_system.warn_color, func_name),
                     ),
                     vec![data.1],
                 ));
@@ -1287,10 +1280,8 @@ pub fn parse_from_source(
             error_system.warnings.push(CompileError::new_warning(
                 String::from("Compile warning"),
                 format!(
-                    "Constant {}{}{} is never used",
-                    error_system.warn_color,
-                    constant,
-                    CompileError::RESET,
+                    "Constant {} is never used",
+                    Color::color(error_system.warn_color, constant),
                 ),
                 vec![loc],
             ));
@@ -1347,35 +1338,27 @@ impl CompileError {
         }
     }
 
-    const RED: &'static str = "\x1b[31;1m";
-    const BLUE: &'static str = "\x1b[34;1m";
-    const YELLOW: &'static str = "\x1b[33;1m";
-    const PINK: &'static str = "\x1b[38;5;161;1m";
-    const RESET: &'static str = "\x1b[0;0m";
-
     pub fn pretty_fmt(
         &self,
         file_info_chart: &BTreeMap<u64, FileInfo>,
         warnings_are_errors: bool,
     ) -> String {
-        let blue = CompileError::BLUE;
-        let reset = CompileError::RESET;
+        let blue = Color::BLUE;
+        let reset = Color::RESET;
 
         let err_color = match self.is_warning {
             true => match warnings_are_errors {
-                true => CompileError::PINK,
-                false => CompileError::YELLOW,
+                true => Color::PINK,
+                false => Color::YELLOW,
             },
-            false => CompileError::RED,
+            false => Color::RED,
         };
 
         let last_line = &self.locations.last();
 
         let mut pretty = format!(
-            "{}{}{}: {}\n{}    --> {}{}\n",
-            err_color,
-            &self.title,
-            reset,
+            "{}: {}\n{}    --> {}{}\n",
+            Color::color(err_color, &self.title),
             self.description,
             blue,
             match last_line {
@@ -1383,8 +1366,12 @@ impl CompileError {
                 Some(location) => match file_info_chart.get(&location.file_id) {
                     None => String::from("file with id ") + &location.file_id.to_string(),
                     Some(info) => format!(
-                        "{}{} line {}{}{} column {}{}",
-                        info.path, reset, blue, location.line, reset, blue, location.column,
+                        "{}{} line {} column {}{}",
+                        info.path,
+                        reset,
+                        Color::blue(location.line),
+                        blue,
+                        location.column,
                     ),
                 },
             },

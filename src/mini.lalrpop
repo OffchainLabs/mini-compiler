@@ -13,6 +13,7 @@ use crate::link::Import;
 use crate::pos::{BytePos, Location};
 use crate::mavm::{Value, Instruction, Opcode};
 use crate::uint256::Uint256;
+use crate::console::Color;
 use std::collections::{HashMap, HashSet};
 
 
@@ -55,12 +56,7 @@ HeadDecl: TopLevelDecl = {
             error_system.errors.push(
                 CompileError::new(
                     String::from("Parser error"),
-                    format!(
-                        "Constant {}{}{} is declared twice",
-                        CompileError::RED,
-                        n,
-                        CompileError::RESET,
-                    ),
+                    format!("Constant {} is declared twice", Color::red(&n)),
                     file_info.location(BytePos::from(lno), filename).into_iter().collect()
                 )
             )
@@ -136,12 +132,7 @@ Attributes: Attributes = {
                 unrecognized => error_system.errors.push(
                     CompileError::new(
                         String::from("Lexer error"),
-                        format!(
-                            "Unrecognized attribute {}{}{}",
-                            CompileError::RED,
-                            unrecognized,
-                            CompileError::RESET,
-                        ),
+                        format!("Unrecognized attribute {}", Color::red(&unrecognized)),
                         file_info.location(BytePos::from(lno), filename).into_iter().collect()
                     )
                 ),
@@ -515,10 +506,8 @@ ConstVal: Uint256 = {
                         CompileError::new_warning(
                             String::from("Parser warning"),
                             format!(
-                                "Constant {}{}{} was used despite being marked as intentionally unused",
-                                error_system.warn_color,
-                                &c,
-                                CompileError::RESET,
+                                "Constant {} was used despite being marked as intentionally unused",
+                                Color::color(error_system.warn_color, &c),
                             ),
                             loc
                         )
@@ -531,12 +520,7 @@ ConstVal: Uint256 = {
                 error_system.errors.push(
                     CompileError::new(
                         String::from("Parser error"),
-                        format!(
-                            "Unrecognized constant {}{}{}",
-                            CompileError::RED,
-                            &c,
-                            CompileError::RESET,
-                        ),
+                        format!("Unrecognized constant {}", Color::red(&c)),
                         loc
                     )
                 );
