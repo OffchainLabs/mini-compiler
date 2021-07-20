@@ -1054,6 +1054,33 @@ pub fn evm_direct_deploy_add(log_to: Option<&Path>, debug: bool) {
     }
 }
 
+pub fn _evm_test_extcodesize_of_constructor(log_to: Option<&Path>) {
+    let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
+    machine.start_at_zero();
+
+    match AbiForContract::new_from_file(&test_contract_path("ExtCodeSizeTest")) {
+        Ok(mut contract) => {
+            let result = contract.deploy(&[], &mut machine, Uint256::zero(), None, false);
+            if let Ok(contract_addr) = result {
+                assert_ne!(contract_addr, Uint256::zero());
+            } else {
+                panic!("deploy failed");
+            }
+        }
+        Err(e) => {
+            panic!("error loading contract: {:?}", e);
+        }
+    }
+
+    if let Some(path) = log_to {
+        machine
+            .runtime_env
+            .recorder
+            .to_file(path, machine.get_total_gas_usage().to_u64().unwrap())
+            .unwrap();
+    }
+}
+
 pub fn _evm_pay_eoa_from_contract(log_to: Option<&Path>, debug: bool) {
     let mut machine = load_from_file(Path::new("arb_os/arbos.mexe"));
     machine.start_at_zero();

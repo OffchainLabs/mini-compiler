@@ -38,6 +38,7 @@ use evmCallStack::evmCallFrame_getMemory;
 use evmCallStack::evmCallFrame_getCallvalue;
 use evmCallStack::evmCallFrame_getCalldata;
 use evmCallStack::evmCallFrame_shouldRevertOnStorageWrite;
+use evmCallStack::evmCallFrame_constructorIsOnStackForAddress;
 
 use accounts::accountStore_createOrAddCodeRef;
 use accounts::account_getAddress;
@@ -296,9 +297,11 @@ public impure func evmOp_codecopy(memAddr: uint, codeOffset: uint, nbytes: uint)
 public impure func evmOp_extcodesize(addrAsUint: uint) -> uint {
     let addr = address(addrAsUint);     // truncates if necessary
     if let Some(topFrame) = evmCallStack_topFrame() {
-        return account_getCodeSize(
-            evmCallFrame_getAccount(topFrame, addr)
-        );
+        return xif (evmCallFrame_constructorIsOnStackForAddress(topFrame, addr)) {
+            0
+        } else {
+            account_getCodeSize(evmCallFrame_getAccount(topFrame, addr))
+        };
     }
 
     evm_runtimePanic(11);
@@ -309,34 +312,19 @@ public impure func evmOp_extcodecopy(addrAsUint: uint, memAddr: uint, codeOffset
     let addr = address(addrAsUint);     // truncates if necessary
     if let Some(topFrame) = evmCallStack_topFrame() {
         let memory = evmCallFrame_getMemory(topFrame);
-        if let Some(code) = account_getCode(
-            evmCallFrame_getAccount(topFrame, addr)
-        ) {
-            // if this would read beyond end of code,
-            //       bytearray_copy will zero-fill the rest of the target memory region,
-            //       which is the desired behavior
-            let updatedMemory = bytearray_copy(
-                code,
-                codeOffset,
-                memory,
-                memAddr,
-                nbytes
-            );
-            if (evmCallStack_setTopFrameMemory(updatedMemory,)) {
-                return;
-            }
+        let (codeArr, codeSize) = xif (evmCallFrame_constructorIsOnStackForAddress(topFrame, addr)) {
+            (bytearray_new(0), 0)
         } else {
-            // code doesn't exist, so zero-fill the target memory region
-            let updatedMemory = bytearray_copy(
-                bytearray_new(0),
-                0,
-                memory,
-                memAddr,
-                nbytes
-            );
-            if (evmCallStack_setTopFrameMemory(updatedMemory,)) {
-                return;
+            xif let Some(code) = account_getCode(evmCallFrame_getAccount(topFrame, addr)) {
+                (code, codeOffset)
+            } else {
+                // code doesn't exist
+                (bytearray_new(0), 0)
             }
+        };
+        memory = bytearray_copy(codeArr, codeSize, memory, memAddr, nbytes);  // will zero-fill anything beyond end of codeArr
+        if (evmCallStack_setTopFrameMemory(memory)) {
+            return;
         }
     }
 
@@ -350,11 +338,15 @@ public impure func evmOp_extcodehash(addrAsUint: uint) -> bytes32 {
         if (account_isEmpty(acct)) {
             return bytes32(0);
         }
-        if let Some(code) = account_getCode(acct) {
-            return keccak256(code, 0, bytearray_size(code));
+        return xif (evmCallFrame_constructorIsOnStackForAddress(topFrame, addr)) {
+            bytes32(0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470)  // hash of empty code
         } else {
-            return bytes32(0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470);
-        }
+            xif let Some(code) = account_getCode(acct) {
+                keccak256(code, 0, bytearray_size(code))
+            } else {
+                bytes32(0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470)  // hash of empty code
+            }
+        };
     }
 
     evm_runtimePanic(13);
@@ -693,6 +685,7 @@ public impure func evmOp_gas() -> uint {
     argsLength: uint,
     retOffset: uint,
     retLength: uint,
+    isConstructor: bool,
     callvalueEscrowKey: option<uint>,  // escrow key that supplies the callvalue (otherwise caller supplies it)
     overrideStartPoint: option<AvmCodePoint>,
 ) -> bool {
@@ -718,6 +711,7 @@ public impure func evmOp_gas() -> uint {
     // After the call completes, control will be thrown directly back to resumeCodePoint.
     let res = evmCallStack_doCall(
         0,
+        isConstructor,
         gas,
         callee,
         balance,
@@ -775,6 +769,7 @@ public impure func evmOp_gas() -> uint {
     // After the call completes, control will be thrown directly back to resumeCodePoint.
     let res = evmCallStack_doCall(
         const::EVMCallType_call,
+        false,
         gas,
         callee,
         balance,
@@ -817,6 +812,7 @@ public impure func evmOp_gas() -> uint {
     };
     let res = evmCallStack_doCall(
         const::EVMCallType_callcode,
+        false,
         gas,
         callee,
         balance,
@@ -858,6 +854,7 @@ public impure func evmOp_gas() -> uint {
      };
      let res = evmCallStack_doCall(
          const::EVMCallType_delegatecall,
+         false,
          gas,
          callee,
          0,  // balance will be filled in by evmCallStack_doCall
@@ -899,6 +896,7 @@ public impure func evmOp_gas() -> uint {
     };
     let res = evmCallStack_doCall(
         const::EVMCallType_staticcall,
+        false,
         gas,
         callee,
         0,  // balance is zero for a staticcall
@@ -1054,6 +1052,7 @@ public impure func evmOp_create2(value: uint, offset: uint, length: uint, salt: 
             0,
             0,           // don't copy returndata back into caller's memory
             0,
+            true,
             None<uint>,
             Some(startPoint),  // use constructor's startPoint, even though code isn't installed yet
         );

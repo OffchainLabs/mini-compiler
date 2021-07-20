@@ -202,6 +202,11 @@ fn test_direct_deploy_add() {
 }
 
 #[test]
+fn test_extcodesize_of_constructor() {
+    crate::evm::_evm_test_extcodesize_of_constructor(None);
+}
+
+#[test]
 fn test_sha256_precompile() {
     crate::evm::evm_eval_sha256(None, false);
 }

@@ -107,6 +107,7 @@ type EvmCallFrame = struct {
     accountStore: AccountStore,         // accountStore used for executing this call
     runningAsAccount: Account,          // cache of accountStore[runningAs]
     caller: address,                    // who called this
+    isConstructor: bool,                // true if this is a constructor
     static: bool,                       // static flag, per EIP-214
     calldata: ByteArray,                // calldata passed in by our caller
     callvalue: uint,                    // Eth value given to this call by its caller
@@ -315,6 +316,7 @@ public impure func initEvmCallStack(
                     accountStore: globalAS,
                     runningAsAccount: accountStore_get(globalAS, request.calleeAddr),
                     caller: request.caller,
+                    isConstructor: false,
                     static: false,
                     calldata: request.calldata,
                     callvalue: request.value,
@@ -519,6 +521,7 @@ public impure func initEvmCallStackForConstructor(
                 accountStore: acctStore,
                 runningAsAccount: accountStore_get(acctStore, request.calleeAddr),
                 caller: request.caller,
+                isConstructor: true,
                 static: false,
                 calldata: request.calldata,
                 callvalue: request.value,
@@ -556,6 +559,7 @@ public impure func initEvmCallStackForConstructor(
                 accountStore: acctStore,
                 runningAsAccount: accountStore_get(acctStore, request.calleeAddr),
                 caller: request.caller,
+                isConstructor: true,
                 static: false,
                 calldata: request.calldata,
                 callvalue: request.value,
@@ -606,6 +610,7 @@ public impure func initEvmCallStackForConstructor(
 
 public impure func evmCallStack_doCall(
     kind: uint,  // currently handle 0 (call), 1 (callcode), 2 (delegatecall), 3 (staticcall)
+    isConstructor: bool,
     gas: uint,
     calleeAddr: address,
     balance: uint,
@@ -694,6 +699,7 @@ public impure func evmCallStack_doCall(
             accountStore: updatedAcctStore,
             runningAsAccount: accountStore_get(updatedAcctStore, runningAsAddr),
             caller: newCallerAddr,
+            isConstructor: isConstructor,
             static: topFrame.static || (kind == const::EVMCallType_staticcall),
             calldata: bytearray_extract(topFrame.memory, argsOffset, argsLength),
             callvalue: balance,
@@ -1102,6 +1108,7 @@ public impure func evmCallStack_callRetryableTxAndReturn(rtx: RetryableTx) -> (b
             bytearray_size(rtx.calldata),
             0,
             0,
+            false,
             Some(rtx.callvalueEscrowKey),
             None<AvmCodePoint>,
         );
@@ -1302,6 +1309,19 @@ public impure func evmCallStack_oldestCallFrame() -> option<EvmCallFrame> {
             frame = parent;
         } else {
             return Some(frame);
+        }
+    };
+}
+
+public func evmCallFrame_constructorIsOnStackForAddress(frame: EvmCallFrame, addr: address) -> bool {
+    return xloop {
+        if ( (frame.isConstructor) && (frame.runningAs == addr) ) {
+            return true;
+        }
+        if let Some(parent) = frame.parent {
+            frame = parent;
+        } else {
+            return false;
         }
     };
 }
