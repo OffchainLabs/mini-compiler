@@ -883,8 +883,6 @@ pub enum Opcode {
     Return,
     UnaryMinus,
     Len,
-    LogicalAnd,
-    LogicalOr,
     AVMOpcode(AVMOpcode),
 }
 
@@ -1054,8 +1052,6 @@ impl Opcode {
             "bitwiseand" => Opcode::AVMOpcode(AVMOpcode::BitwiseAnd),
             "bitwiseor" => Opcode::AVMOpcode(AVMOpcode::BitwiseOr),
             "bitwisexor" => Opcode::AVMOpcode(AVMOpcode::BitwiseXor),
-            "logicaland" => Opcode::LogicalAnd,
-            "logicalor" => Opcode::LogicalOr,
             "inbox" => Opcode::AVMOpcode(AVMOpcode::Inbox),
             "inboxpeek" => Opcode::AVMOpcode(AVMOpcode::InboxPeek),
             "jump" => Opcode::AVMOpcode(AVMOpcode::Jump),
@@ -1086,8 +1082,6 @@ impl Opcode {
         match self {
             Opcode::AVMOpcode(avm) => avm.to_name(),
             Opcode::UnaryMinus => "unaryminus",
-            Opcode::LogicalAnd => "logicaland",
-            Opcode::LogicalOr => "logicalor",
             _ => "Unknown",
         }
     }

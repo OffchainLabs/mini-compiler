@@ -11,7 +11,7 @@ use crate::compile::{path_display, CompileError};
 use crate::link::{value_from_field_list, Import, TUPLE_SIZE};
 use crate::mavm::{Instruction, Value};
 use crate::pos::Location;
-use crate::stringtable::StringId;
+use crate::stringtable::{StringId, StringTable};
 use crate::uint256::Uint256;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -135,6 +135,9 @@ impl AbstractSyntaxTree for Type {
     }
     fn is_pure(&mut self) -> bool {
         true
+    }
+    fn display_string(&self, _string_table: &StringTable) -> String {
+        self.display()
     }
 }
 
@@ -1338,7 +1341,6 @@ pub struct Statement {
 ///A raw statement containing no debug information that has not yet been type checked.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum StatementKind {
-    Noop(),
     ReturnVoid(),
     Return(Expr),
     Break(Option<Expr>, Option<String>),
@@ -1396,6 +1398,22 @@ impl<T> MatchPattern<T> {
                 .iter()
                 .flat_map(|pat| pat.collect_identifiers())
                 .collect(),
+        }
+    }
+    pub fn display(&self, string_table: &StringTable) -> String {
+        match &self.kind {
+            MatchPatternKind::Bind(id) => string_table.name_from_id(*id).clone(),
+            MatchPatternKind::Assign(id) => format!("*{}", string_table.name_from_id(*id)),
+            MatchPatternKind::Tuple(pats) => {
+                let mut s = String::from("(");
+                for pat in pats {
+                    s.push_str(&format!("{}, ", pat.display(string_table)))
+                }
+                s.pop();
+                s.pop();
+                s.push(')');
+                s
+            }
         }
     }
 }
@@ -1556,6 +1574,25 @@ pub enum UnaryOp {
     ToAddress,
 }
 
+impl UnaryOp {
+    pub fn to_name(&self) -> String {
+        format!(
+            "{}",
+            match self {
+                UnaryOp::Minus => "unary minus",
+                UnaryOp::BitwiseNeg => "~",
+                UnaryOp::Not => "!",
+                UnaryOp::Hash => "hash 1 item",
+                UnaryOp::Len => "len",
+                UnaryOp::ToUint => "uint cast",
+                UnaryOp::ToInt => "int cast",
+                UnaryOp::ToBytes32 => "bytes32 cast",
+                UnaryOp::ToAddress => "address cast",
+            }
+        )
+    }
+}
+
 ///A mini binary operator.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BinaryOp {
@@ -1581,12 +1618,46 @@ pub enum BinaryOp {
     BitwiseXor,
     ShiftLeft,
     ShiftRight,
-    _LogicalAnd,
-    LogicalOr,
     Hash,
     GetBuffer8,
     GetBuffer64,
     GetBuffer256,
+}
+
+impl BinaryOp {
+    pub fn to_name(&self) -> String {
+        format!(
+            "{}",
+            match self {
+                BinaryOp::Plus => "+",
+                BinaryOp::Minus => "-",
+                BinaryOp::Times => "*",
+                BinaryOp::Div => "/",
+                BinaryOp::Mod => "%",
+                BinaryOp::Sdiv => "signed /",
+                BinaryOp::Smod => "signed %",
+                BinaryOp::LessThan => "<",
+                BinaryOp::GreaterThan => ">",
+                BinaryOp::LessEq => "<=",
+                BinaryOp::GreaterEq => ">=",
+                BinaryOp::SLessThan => "< signed",
+                BinaryOp::SGreaterThan => "> signed",
+                BinaryOp::SLessEq => "<= signed",
+                BinaryOp::SGreaterEq => ">= signed",
+                BinaryOp::Equal => "==",
+                BinaryOp::NotEqual => "!=",
+                BinaryOp::BitwiseAnd => "&",
+                BinaryOp::BitwiseOr => "|",
+                BinaryOp::BitwiseXor => "^",
+                BinaryOp::ShiftLeft => "<<",
+                BinaryOp::ShiftRight => ">>",
+                BinaryOp::Hash => "hash 2 items",
+                BinaryOp::GetBuffer8 => "get buffer 8",
+                BinaryOp::GetBuffer64 => "get buffer 64",
+                BinaryOp::GetBuffer256 => "get buffer 256",
+            }
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -1594,6 +1665,19 @@ pub enum TrinaryOp {
     SetBuffer8,
     SetBuffer64,
     SetBuffer256,
+}
+
+impl TrinaryOp {
+    pub fn to_name(&self) -> String {
+        format!(
+            "{}",
+            match self {
+                TrinaryOp::SetBuffer8 => "set buffer 8",
+                TrinaryOp::SetBuffer64 => "set buffer 64",
+                TrinaryOp::SetBuffer256 => "set buffer 256",
+            }
+        )
+    }
 }
 
 ///Used in StructInitializer expressions to map expressions to fields of the struct.

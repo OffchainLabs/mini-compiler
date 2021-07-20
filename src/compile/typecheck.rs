@@ -17,7 +17,10 @@ use crate::pos::{Column, Location};
 use crate::stringtable::{StringId, StringTable};
 use crate::uint256::Uint256;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fmt::Write;
+use std::rc::Rc;
 
 type TypeTable = HashMap<usize, Type>;
 
@@ -45,6 +48,7 @@ pub trait AbstractSyntaxTree {
         }
     }
     fn is_pure(&mut self) -> bool;
+    fn display_string(&self, string_table: &StringTable) -> String;
 }
 
 ///Represents a mutable reference to any AST node.
@@ -73,6 +77,38 @@ impl<'a> AbstractSyntaxTree for TypeCheckedNode<'a> {
             TypeCheckedNode::Type(_) => true,
         }
     }
+    fn display_string(&self, string_table: &StringTable) -> String {
+        match self {
+            TypeCheckedNode::Statement(stat) => stat.display_string(string_table),
+            TypeCheckedNode::Expression(exp) => exp.display_string(string_table),
+            TypeCheckedNode::StructField(field) => field.display_string(string_table),
+            TypeCheckedNode::Type(tipe) => tipe.display_string(string_table),
+        }
+    }
+}
+
+fn disp(
+    node: &mut TypeCheckedNode,
+    state: &StringTable,
+    mut_state: &mut (usize, Rc<RefCell<String>>),
+) -> bool {
+    for _ in 0..mut_state.0 {
+        let _ = write!(*mut_state.1.borrow_mut(), "  ");
+    }
+    let _ = writeln!(*mut_state.1.borrow_mut(), "{}", node.display_string(state));
+    mut_state.0 += 1;
+    true
+}
+
+pub fn display_indented(node: &mut TypeCheckedNode, string_table: &StringTable) -> String {
+    let mut r = (3, Rc::new(RefCell::new(String::new())));
+    let _ = writeln!(
+        *r.1.borrow_mut(),
+        "    {}",
+        node.display_string(string_table)
+    );
+    node.recursive_apply(disp, string_table, &mut r);
+    r.1.take()
 }
 
 impl<'a> TypeCheckedNode<'a> {
@@ -129,6 +165,9 @@ impl AbstractSyntaxTree for TypeCheckedFunc {
     }
     fn is_pure(&mut self) -> bool {
         self.code.iter_mut().all(|statement| statement.is_pure())
+    }
+    fn display_string(&self, string_table: &StringTable) -> String {
+        format!("function: \"{}\"", string_table.name_from_id(self.name))
     }
 }
 
@@ -801,16 +840,15 @@ impl TypeCheckedFunc {
 }
 
 ///A mini statement that has been type checked.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TypeCheckedStatement {
     pub kind: TypeCheckedStatementKind,
     pub debug_info: DebugInfo,
 }
 
 ///A mini statement that has been type checked.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TypeCheckedStatementKind {
-    Noop(),
     ReturnVoid(),
     Return(TypeCheckedExpr),
     Break(Option<TypeCheckedExpr>, String),
@@ -827,7 +865,7 @@ pub enum TypeCheckedStatementKind {
 impl AbstractSyntaxTree for TypeCheckedStatement {
     fn child_nodes(&mut self) -> Vec<TypeCheckedNode> {
         match &mut self.kind {
-            TypeCheckedStatementKind::Noop() | TypeCheckedStatementKind::ReturnVoid() => vec![],
+            TypeCheckedStatementKind::ReturnVoid() => vec![],
             TypeCheckedStatementKind::Return(exp)
             | TypeCheckedStatementKind::Expression(exp)
             | TypeCheckedStatementKind::Let(_, exp)
@@ -853,8 +891,7 @@ impl AbstractSyntaxTree for TypeCheckedStatement {
         }
     }
     fn is_pure(&mut self) -> bool {
-        if let TypeCheckedStatementKind::Noop() | TypeCheckedStatementKind::ReturnVoid() = self.kind
-        {
+        if let TypeCheckedStatementKind::ReturnVoid() = self.kind {
             true
         } else if let TypeCheckedStatementKind::AssignGlobal(_, _) = self.kind {
             false
@@ -865,19 +902,39 @@ impl AbstractSyntaxTree for TypeCheckedStatement {
             self.child_nodes().iter_mut().all(|node| node.is_pure())
         }
     }
+    fn display_string(&self, string_table: &StringTable) -> String {
+        format!(
+            "{}",
+            match &self.kind {
+                TypeCheckedStatementKind::ReturnVoid() => format!("return void"),
+                TypeCheckedStatementKind::Return(_) => format!("return"),
+                TypeCheckedStatementKind::Break(_, _) => format!("break"),
+                TypeCheckedStatementKind::Expression(_) => format!("expression statement"),
+                TypeCheckedStatementKind::Let(id, _) =>
+                    format!("let \"{}\"", id.display(string_table)),
+                TypeCheckedStatementKind::While(_, _) => format!("while"),
+                TypeCheckedStatementKind::AssignLocal(id, _) =>
+                    format!("\"{}\" =", string_table.name_from_id(*id)),
+                TypeCheckedStatementKind::AssignGlobal(_, _) => format!("global ="),
+                TypeCheckedStatementKind::Asm(_, _) => format!("asm statement"),
+                TypeCheckedStatementKind::DebugPrint(_) => format!("print"),
+                TypeCheckedStatementKind::Assert(_) => format!("assert"),
+            }
+        )
+    }
 }
 
 pub type TypeCheckedMatchPattern = MatchPattern<Type>;
 
 ///A mini expression with associated `DebugInfo` that has been type checked.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TypeCheckedExpr {
     pub kind: TypeCheckedExprKind,
     pub debug_info: DebugInfo,
 }
 
 ///A mini expression that has been type checked.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TypeCheckedExprKind {
     NewBuffer,
     UnaryOp(UnaryOp, Box<TypeCheckedExpr>, Type),
@@ -1057,6 +1114,66 @@ impl AbstractSyntaxTree for TypeCheckedExpr {
             _ => self.child_nodes().iter_mut().all(|node| node.is_pure()),
         }
     }
+    fn display_string(&self, string_table: &StringTable) -> String {
+        match &self.kind {
+            TypeCheckedExprKind::NewBuffer => format!("new buffer"),
+            TypeCheckedExprKind::UnaryOp(op, _, _) => format!("{}", op.to_name()),
+            TypeCheckedExprKind::Binary(op, _, _, _) => format!("{}", op.to_name()),
+            TypeCheckedExprKind::Trinary(op, _, _, _, _) => format!("{}", op.to_name()),
+            TypeCheckedExprKind::ShortcutOr(_, _) => format!("shortcut or"),
+            TypeCheckedExprKind::ShortcutAnd(_, _) => format!("shortcut and"),
+            TypeCheckedExprKind::LocalVariableRef(id, _) => {
+                format!("\"{}\"", string_table.name_from_id(*id))
+            }
+            TypeCheckedExprKind::GlobalVariableRef(id, _) => {
+                format!("global \"{}\"", string_table.name_from_id(*id))
+            }
+            TypeCheckedExprKind::Variant(_) => format!("Some"),
+            TypeCheckedExprKind::FuncRef(id, _) => {
+                format!("func \"{}\"", string_table.name_from_id(*id))
+            }
+            TypeCheckedExprKind::TupleRef(_, i, _) => {
+                format!("tuple ref field {}", i.add(&Uint256::one()))
+            }
+            TypeCheckedExprKind::DotRef(_, id, idx, _) => {
+                format!(
+                    "dot ref to field {} of \"{}\"",
+                    idx + 1,
+                    string_table.name_from_id(*id)
+                )
+            }
+            TypeCheckedExprKind::Const(a, _) => format!("{}", a),
+            TypeCheckedExprKind::FunctionCall(_, _, _, _) => format!("Function call"),
+            TypeCheckedExprKind::CodeBlock(_) => format!("codeblock"),
+            TypeCheckedExprKind::StructInitializer(_, _) => format!("struct initializer"),
+            TypeCheckedExprKind::ArrayRef(_, _, _) => format!("array ref"),
+            TypeCheckedExprKind::FixedArrayRef(_, _, len, _) => {
+                format!("fixed array ref at index {}", len)
+            }
+            TypeCheckedExprKind::MapRef(_, _, _) => format!("map ref"),
+            TypeCheckedExprKind::Tuple(_, _) => format!("tuple"),
+            TypeCheckedExprKind::NewArray(_, _, _) => format!("new array"),
+            TypeCheckedExprKind::NewFixedArray(len, _, _) => format!("new array length {}", len),
+            TypeCheckedExprKind::NewMap(_) => format!("new map"),
+            TypeCheckedExprKind::ArrayMod(_, _, _, _) => format!("array mod"),
+            TypeCheckedExprKind::FixedArrayMod(_, _, _, index, _) => {
+                format!("fixed array mod at {}", index)
+            }
+            TypeCheckedExprKind::MapMod(_, _, _, _) => format!("map mod"),
+            TypeCheckedExprKind::StructMod(_, index, _, _) => {
+                format!("struct mod at index {}", index)
+            }
+            TypeCheckedExprKind::Cast(_, tipe) => format!("Cast to {}", tipe.display()),
+            TypeCheckedExprKind::Asm(_, _, _) => format!("asm"),
+            TypeCheckedExprKind::Error => format!("error"),
+            TypeCheckedExprKind::GetGas => format!("get gas"),
+            TypeCheckedExprKind::SetGas(_) => format!("set gas"),
+            TypeCheckedExprKind::Try(_, _) => format!("?"),
+            TypeCheckedExprKind::If(_, _, _, _) => format!("if"),
+            TypeCheckedExprKind::IfLet(_, _, _, _, _) => format!("if let"),
+            TypeCheckedExprKind::Loop(_) => format!("loop"),
+        }
+    }
 }
 
 impl TypeCheckedExpr {
@@ -1112,6 +1229,9 @@ impl AbstractSyntaxTree for TypeCheckedFieldInitializer {
     }
     fn is_pure(&mut self) -> bool {
         self.value.is_pure()
+    }
+    fn display_string(&self, string_table: &StringTable) -> String {
+        self.value.display_string(string_table)
     }
 }
 
@@ -1461,7 +1581,6 @@ fn typecheck_statement<'a>(
     let kind = &statement.kind;
     let debug_info = statement.debug_info;
     let (stat, binds) = match kind {
-        StatementKind::Noop() => Ok((TypeCheckedStatementKind::Noop(), vec![])),
         StatementKind::ReturnVoid() => {
             if Type::Void.assignable(return_type, type_tree, HashSet::new()) {
                 Ok((TypeCheckedStatementKind::ReturnVoid(), vec![]))
@@ -3493,22 +3612,6 @@ fn typecheck_binary_op(
                 loc.into_iter().collect(),
             )),
         },
-        BinaryOp::_LogicalAnd | BinaryOp::LogicalOr => match (subtype1, subtype2) {
-            (Type::Bool, Type::Bool) => Ok(TypeCheckedExprKind::Binary(
-                op,
-                Box::new(tcs1),
-                Box::new(tcs2),
-                Type::Bool,
-            )),
-            (subtype1, subtype2) => Err(CompileError::new_type_error(
-                format!(
-                    "invalid argument types to binary logical operator: \"{}\" and \"{}\"",
-                    subtype1.display(),
-                    subtype2.display()
-                ),
-                loc.into_iter().collect(),
-            )),
-        },
         BinaryOp::Hash => match (subtype1, subtype2) {
             (Type::Bytes32, Type::Bytes32) => Ok(TypeCheckedExprKind::Binary(
                 op,
@@ -3786,40 +3889,6 @@ fn typecheck_binary_op_const(
                 ))
             }
         }
-        BinaryOp::_LogicalAnd => {
-            if (t1 == Type::Bool) && (t2 == Type::Bool) {
-                Ok(TypeCheckedExprKind::Const(
-                    Value::Int(Uint256::from_bool(!val1.is_zero() && !val2.is_zero())),
-                    Type::Bool,
-                ))
-            } else {
-                Err(CompileError::new_type_error(
-                    format!(
-                        "invalid argument types to logical and: \"{}\" and \"{}\"",
-                        t1.display(),
-                        t2.display()
-                    ),
-                    loc.into_iter().collect(),
-                ))
-            }
-        }
-        BinaryOp::LogicalOr => {
-            if (t1 == Type::Bool) && (t2 == Type::Bool) {
-                Ok(TypeCheckedExprKind::Const(
-                    Value::Int(Uint256::from_bool(!val1.is_zero() || !val2.is_zero())),
-                    Type::Bool,
-                ))
-            } else {
-                Err(CompileError::new_type_error(
-                    format!(
-                        "invalid argument types to logical or: \"{}\" and \"{}\"",
-                        t1.display(),
-                        t2.display()
-                    ),
-                    loc.into_iter().collect(),
-                ))
-            }
-        }
         BinaryOp::ShiftLeft | BinaryOp::ShiftRight => {
             if t1 == Type::Uint {
                 Ok(TypeCheckedExprKind::Const(
@@ -3878,7 +3947,7 @@ fn typecheck_binary_op_const(
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TypeCheckedCodeBlock {
     pub body: Vec<TypeCheckedStatement>,
     pub ret_expr: Option<Box<TypeCheckedExpr>>,
@@ -3924,6 +3993,9 @@ impl AbstractSyntaxTree for TypeCheckedCodeBlock {
                 .as_mut()
                 .map(|expr| expr.is_pure())
                 .unwrap_or(true)
+    }
+    fn display_string(&self, _string_table: &StringTable) -> String {
+        format!("codeblock")
     }
 }
 

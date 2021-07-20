@@ -55,13 +55,13 @@ $(STDDIR)/bytearraytest.mexe: compiler $(STDDIR)/bytearraytest.mini
 	$(CARGORUN) compile $(STDDIR)/bytearraytest.mini -o $(STDDIR)/bytearraytest.mexe $(COMPILEFLAGS) -t
 
 $(STDDIR)/blstest.mexe: compiler $(BUILTINMAOS) $(STDDIR)/blstest.mini $(STDDIR)
-	$(CARGORUN) compile $(STDDIR)/blstest.mini $(STDLIB) -o $(STDDIR)/blstest.mexe $(COMPILEFLAGS) -t
+	$(CARGORUN) compile $(STDDIR)/blstest.mini -o $(STDDIR)/blstest.mexe $(COMPILEFLAGS) -t
 
 $(STDDIR)/fixedpointtest.mexe: compiler $(STDDIR)/fixedpointtest.mini $(STDDIR)/fixedpoint.mini
 	$(CARGORUN) compile $(STDDIR)/fixedpointtest.mini -o $(STDDIR)/fixedpointtest.mexe $(COMPILEFLAGS) -t
 
-$(STDDIR)/bytearraybench.mexe: compiler $(BUILTINMAOS) $(STDDIR)/bytearraybench.mini $(STDLIB)
-	$(CARGORUN) compile $(STDDIR)/bytearraybench.mini $(STDLIB) -o $(STDDIR)/bytearraybench.mexe $(COMPILEFLAGS) -t
+$(STDDIR)/bytearraybench.mexe: compiler $(BUILTINMAOS) $(STDDIR)/bytearraybench.mini
+	$(CARGORUN) compile $(STDDIR)/bytearraybench.mini -o $(STDDIR)/bytearraybench.mexe $(COMPILEFLAGS) -t
 
 $(STDDIR)/bufferopcodetest.mexe: compiler $(BUILTINMAOS) $(STDDIR)/bufferopcodetest.mini
 	$(CARGORUN) compile $(STDDIR)/bufferopcodetest.mini -o $(STDDIR)/bufferopcodetest.mexe $(COMPILEFLAGS) -t

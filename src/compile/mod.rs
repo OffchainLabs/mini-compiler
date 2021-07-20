@@ -4,6 +4,7 @@
 
 //! Contains utilities for compiling mini source code.
 
+use crate::compile::typecheck::display_indented;
 use crate::link::{link, postlink_compile, ExportedFunc, Import, ImportedFunc, LinkedProgram};
 use crate::mavm::Instruction;
 use crate::pos::{BytePos, Location};
@@ -18,16 +19,17 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::Write;
 use std::fmt::{Debug, Display, Formatter};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Read};
 use std::path::Path;
+use std::str::FromStr;
 use typecheck::TypeCheckedFunc;
 
 pub use ast::{DebugInfo, GlobalVarDecl, StructField, TopLevelDecl, Type, TypeTree};
 pub use source::Lines;
-use std::str::FromStr;
 pub use typecheck::{AbstractSyntaxTree, InliningMode, TypeCheckedNode};
 
 mod ast;
@@ -40,7 +42,7 @@ lalrpop_mod!(mini);
 ///Command line options for compile subcommand.
 #[derive(Clap, Debug, Default)]
 pub struct CompileStruct {
-    pub input: Vec<String>,
+    pub input: String,
     #[clap(short, long)]
     pub debug_mode: bool,
     #[clap(short, long)]
@@ -108,8 +110,8 @@ struct Module {
 }
 
 ///Represents the contents of a source file after type checking is done.
-#[derive(Clone, Debug)]
-struct TypeCheckedModule {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TypeCheckedModule {
     /// Collection of functions defined locally within the source file that have been validated by
     /// typechecking
     checked_funcs: BTreeMap<StringId, TypeCheckedFunc>,
@@ -134,6 +136,39 @@ struct TypeCheckedModule {
 }
 
 impl CompileStruct {
+    pub fn invoke_compile(&self) -> Result<(Vec<TypeCheckedModule>, TypeTree), CompileError> {
+        let mut error_system = ErrorSystem {
+            errors: vec![],
+            warnings: vec![],
+            warnings_are_errors: self.warnings_are_errors,
+            warn_color: match self.warnings_are_errors {
+                true => CompileError::PINK,
+                false => CompileError::YELLOW,
+            },
+            file_info_chart: BTreeMap::new(),
+        };
+
+        let mut file_info_chart = BTreeMap::new();
+
+        let constants_path = match &self.consts_file {
+            Some(path) => Some(Path::new(path)),
+            None => None,
+        };
+        {
+            let path = Path::new(&self.input);
+            let library = normalize_libraries(path);
+            let (folder, main) = preprocess_path(path)?;
+            compile_to_typecheck(
+                folder,
+                library,
+                &main,
+                &mut file_info_chart,
+                constants_path,
+                &mut error_system,
+                !self.no_builtins,
+            )
+        }
+    }
     pub fn invoke(&self) -> Result<(LinkedProgram, ErrorSystem), ErrorSystem> {
         let mut error_system = ErrorSystem {
             errors: vec![],
@@ -146,17 +181,24 @@ impl CompileStruct {
             file_info_chart: BTreeMap::new(),
         };
 
-        let mut compiled_progs = Vec::new();
         let mut file_info_chart = BTreeMap::new();
 
-        for filename in &self.input {
-            let path = Path::new(filename);
-            let constants_path = match &self.consts_file {
-                Some(path) => Some(Path::new(path)),
-                None => None,
-            };
-            match compile_from_file(
-                path,
+        let constants_path = match &self.consts_file {
+            Some(path) => Some(Path::new(path)),
+            None => None,
+        };
+        let compiled_progs = {
+            let path = Path::new(&self.input);
+            let library = normalize_libraries(path);
+            let (folder, main) = preprocess_path(path).map_err(|err| {
+                error_system.errors.push(err);
+                error_system.file_info_chart = file_info_chart.clone();
+                error_system.clone()
+            })?;
+            compile_from_folder(
+                folder,
+                library,
+                &main,
                 &mut file_info_chart,
                 &self.inline,
                 constants_path,
@@ -164,20 +206,13 @@ impl CompileStruct {
                 &mut error_system,
                 self.release_build,
                 !self.no_builtins,
-            ) {
-                Ok(idk) => idk,
-                Err(err) => {
-                    error_system.errors.push(err);
-                    error_system.file_info_chart = file_info_chart;
-                    return Err(error_system);
-                }
-            }
-            .into_iter()
-            .for_each(|prog| {
-                file_info_chart.extend(prog.file_info_chart.clone());
-                compiled_progs.push(prog)
-            });
-        }
+            )
+            .map_err(|err| {
+                error_system.errors.push(err);
+                error_system.file_info_chart = file_info_chart.clone();
+                error_system.clone()
+            })?
+        };
         let linked_prog = match link(&compiled_progs, self.test_mode, &mut error_system) {
             Ok(idk) => idk,
             Err(err) => {
@@ -406,6 +441,24 @@ impl TypeCheckedModule {
 
         error_system.warnings.extend(flow_warnings);
     }
+    pub(crate) fn show_ast(&mut self) -> String {
+        let mut s = String::new();
+        let _ = writeln!(s, "{}", self.name);
+        for func in self.checked_funcs.values_mut() {
+            let _ = writeln!(s, "  {}", func.display_string(&self.string_table));
+            for statement in &mut func.code {
+                let _ = writeln!(
+                    s,
+                    "{}",
+                    display_indented(
+                        &mut TypeCheckedNode::Statement(statement),
+                        &self.string_table
+                    )
+                );
+            }
+        }
+        s
+    }
 }
 
 ///Represents a mini program or module that has been compiled and possibly linked, but has not had
@@ -546,23 +599,8 @@ impl CompiledProgram {
     }
 }
 
-///Returns either a CompiledProgram generated from source code at path, otherwise returns a
-/// CompileError.
-///
-/// The file_id specified will be used as the file_id in locations originating from this source
-/// file, and if debug is set to true, then compiler internal debug information will be printed.
-pub fn compile_from_file(
-    path: &Path,
-    file_info_chart: &mut BTreeMap<u64, FileInfo>,
-    inline: &Option<InliningHeuristic>,
-    constants_path: Option<&Path>,
-    must_use_global_consts: bool,
-    error_system: &mut ErrorSystem,
-    release_build: bool,
-    builtins: bool,
-) -> Result<Vec<CompiledProgram>, CompileError> {
-    let library = path
-        .parent()
+fn normalize_libraries(path: &Path) -> Option<&str> {
+    path.parent()
         .map(|par| {
             par.file_name()
                 .map(|lib| {
@@ -577,39 +615,26 @@ pub fn compile_from_file(
                 })
                 .unwrap_or(None)
         })
-        .unwrap_or(None);
+        .unwrap_or(None)
+}
+
+pub fn preprocess_path(path: &Path) -> Result<(&Path, String), CompileError> {
     if path.is_dir() {
-        compile_from_folder(
-            path,
-            library,
-            "main",
-            file_info_chart,
-            inline,
-            constants_path,
-            must_use_global_consts,
-            error_system,
-            release_build,
-            builtins,
-        )
+        Ok((path, "main".to_string()))
     } else if let (Some(parent), Some(file_name)) = (path.parent(), path.file_stem()) {
-        compile_from_folder(
+        Ok((
             parent,
-            library,
-            file_name.to_str().ok_or_else(|| {
-                CompileError::new(
-                    String::from("Compile error"),
-                    format!("File name {:?} must be UTF-8", file_name),
-                    vec![],
-                )
-            })?,
-            file_info_chart,
-            inline,
-            constants_path,
-            must_use_global_consts,
-            error_system,
-            release_build,
-            builtins,
-        )
+            file_name
+                .to_str()
+                .ok_or_else(|| {
+                    CompileError::new(
+                        String::from("Compile error"),
+                        format!("File name {:?} must be UTF-8", file_name),
+                        vec![],
+                    )
+                })?
+                .to_string(),
+        ))
     } else {
         Err(CompileError::new(
             String::from("Compile error"),
@@ -634,26 +659,17 @@ fn _print_node(node: &mut TypeCheckedNode, state: &String, mut_state: &mut usize
     true
 }
 
-///Compiles a `Vec<CompiledProgram>` from a folder or generates a `CompileError` if a problem is
-///encountered during compilation.
-///
-///The `folder` argument gives the path to the folder, `library` optionally contains a library
-///prefix attached to the front of all paths, `main` contains the name of the main file in the
-///folder, `file_info_chart` contains a map from the `u64` hashes of file names to the `FileInfo`
-///they represent, useful for formatting errors, and `inline` determines whether inlining is used
-///when compiling this folder.
-pub fn compile_from_folder(
+///Compiles up to the end of typechecking, produces the list of TypeCheckedModules in this program
+/// as well as the type tree
+fn compile_to_typecheck(
     folder: &Path,
     library: Option<&str>,
     main: &str,
     file_info_chart: &mut BTreeMap<u64, FileInfo>,
-    inline: &Option<InliningHeuristic>,
     constants_path: Option<&Path>,
-    must_use_global_consts: bool,
     error_system: &mut ErrorSystem,
-    release_build: bool,
     builtins: bool,
-) -> Result<Vec<CompiledProgram>, CompileError> {
+) -> Result<(Vec<TypeCheckedModule>, TypeTree), CompileError> {
     let (mut programs, import_map) = create_program_tree(
         folder,
         library,
@@ -665,7 +681,6 @@ pub fn compile_from_folder(
     )?;
 
     resolve_imports(&mut programs, &import_map, error_system)?;
-
     //Conversion of programs from `HashMap` to `Vec` for typechecking
     let type_tree = create_type_tree(&programs);
     let mut modules = vec![programs
@@ -680,8 +695,41 @@ pub fn compile_from_folder(
         out.sort_by(|module1, module2| module2.name.cmp(&module1.name));
         out
     });
-    let mut typechecked_modules =
-        typecheck_programs(&type_tree, modules, file_info_chart, error_system)?;
+    Ok((
+        typecheck_programs(&type_tree, modules, file_info_chart, error_system)?,
+        type_tree,
+    ))
+}
+
+///Compiles a `Vec<CompiledProgram>` from a folder or generates a `CompileError` if a problem is
+///encountered during compilation.
+///
+///The `folder` argument gives the path to the folder, `library` optionally contains a library
+///prefix attached to the front of all paths, `main` contains the name of the main file in the
+///folder, `file_info_chart` contains a map from the `u64` hashes of file names to the `Strings`
+///they represent, useful for formatting errors, and `inline` determines whether inlining is used
+///when compiling this folder.
+pub fn compile_from_folder(
+    folder: &Path,
+    library: Option<&str>,
+    main: &str,
+    file_info_chart: &mut BTreeMap<u64, FileInfo>,
+    inline: &Option<InliningHeuristic>,
+    constants_path: Option<&Path>,
+    must_use_global_consts: bool,
+    error_system: &mut ErrorSystem,
+    release_build: bool,
+    builtins: bool,
+) -> Result<Vec<CompiledProgram>, CompileError> {
+    let (mut typechecked_modules, type_tree) = compile_to_typecheck(
+        folder,
+        library,
+        main,
+        file_info_chart,
+        constants_path,
+        error_system,
+        builtins,
+    )?;
 
     if must_use_global_consts {
         check_global_constants(&typechecked_modules, constants_path, error_system);
@@ -1434,6 +1482,7 @@ impl CompileError {
     }
 }
 
+#[derive(Clone)]
 ///A collection of all compiler warnings encountered and the mechanism to handle them.
 pub struct ErrorSystem {
     ///All compilation errors

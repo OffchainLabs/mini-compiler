@@ -185,7 +185,7 @@ impl ImportedFunc {
 ///
 /// This struct differs from `ExportedFuncPoint` because the label field points to a virtual label
 /// rather than an absolute address.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ExportedFunc {
     pub name: String,
     pub label: Label,

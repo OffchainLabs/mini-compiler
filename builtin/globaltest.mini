@@ -134,6 +134,18 @@ impure func tests() -> uint {
         return 24;
     }
 
+    let x = 8s;
+    let y = -3s;
+    let z = x / y;
+    if (z != -2s) {
+        return 25;
+    }
+    let z = x % y;
+    if (z != 2s) {
+        return 26;
+    }
+
+
     return struct9test();
 }
 
@@ -151,4 +163,18 @@ func struct9test() -> uint {
     };
 
     return 0;
+}
+
+func signedDivisionTest() -> int {
+    let x = 8s;
+    let y = -3s;
+    let z = x / y;
+    return z;
+}
+
+func signedModuloTest() -> int {
+    let x = 8s;
+    let y = -3s;
+    let z = x % y;
+    return z;
 }
